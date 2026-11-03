@@ -1,0 +1,120 @@
+====== Core/Matrix � Semantische Zustandsmatrix ======
+
+Namespace: ''ioBroker_NewGen.Core.Matrix''
+
+Die ''SemanticStateMatrix'' ist die zentrale Engine f�r Objekte, States, Semantik,
+History und Persistenz. Sie ist **kein reiner Key-Value-Store**, sondern ein
+geometrischer, mehrdimensionaler Vectorspace: Jeder State besitzt neben seinem
+aktuellen Wert auch ein semantisches Embedding, �ber das sich der gesamte
+Objektbaum durchsuchen l�sst.
+
+===== Klassen�bersicht =====
+
+^ Klasse / Interface        ^ Datei                        ^ Beschreibung ^
+| ''SemanticStateMatrix''   | SemanticStateMatrix.cs       | Zentrale Engine (Objekte, States, Subscriptions, Snapshot) |
+| ''MatrixObject''          | MatrixObject.cs              | Beschreibt Ger�t/Kanal/Datenpunkt (Id, Name, Type, Meta) |
+| ''StateNode''              | StateNode.cs                 | Aktueller Zustand + Embedding + In-Memory-History, thread-sicher |
+| ''HistorySample''          | HistorySample.cs             | Record: Id, Timestamp, Value, Embedding |
+| ''IEmbeddingService''      | IEmbeddingService.cs         | Interface f�r Text-/Payload-Embeddings |
+| ''HashingEmbeddingService''| HashingEmbeddingService.cs   | Deterministische Default-Implementierung (Feature Hashing) |
+| ''IVectorIndex''           | IVectorIndex.cs              | Interface f�r semantischen �hnlichkeits-Index |
+| ''VectorIndex''            | VectorIndex.cs               | Default-Implementierung: Brute-Force-Kosinus-�hnlichkeit |
+| ''IRoleService''           | IRoleService.cs              | Interface f�r Lese-/Schreibrechte |
+| ''DefaultRoleService''     | DefaultRoleService.cs        | Default: voller Zugriff, persistente User-/Rollenregeln mit Allow/Deny |
+| ''SnapshotEntry''          | SnapshotEntry.cs (internal)  | JSONL-Zeilenformat f�r Snapshot-Persistenz |
+
+===== Datenmodell =====
+
+==== MatrixObject ====
+
+<code csharp>
+public sealed class MatrixObject
+{
+    public required string Id { get; init; }
+    public required string Name { get; init; }
+    public required string Type { get; init; }
+    public Dictionary<string, string> Meta { get; init; } = new();
+
+    public string BuildEmbeddingSourceText(); // Id + Name + Type + Meta
+}
+</code>
+
+==== StateNode ====
+
+Thread-sicher über einen zentralen ''ReaderWriterLockSlim'' für konsistente
+Lese-/Schreibzugriffe, ergänzt durch den internen StateNode-Lock, hält:
+  * ''Value'' (object?)
+  * ''Timestamp'' (UTC)
+  * ''LastWrittenBy''
+  * ''Embedding'' (float[])
+  * ''Meta'' (Dictionary<string,string>)
+  * ''History'' (ConcurrentQueue<HistorySample>, begrenzt auf ''maxInMemoryHistory'', Default 500)
+
+==== HistorySample ====
+
+<code csharp>
+public sealed record HistorySample(string Id, DateTime Timestamp, object? Value, float[] Embedding);
+</code>
+
+===== �ffentliche API der SemanticStateMatrix =====
+
+^ Methode                                                      ^ Beschreibung ^
+| ''RegisterObject(MatrixObject)'' ? bool                      | Registriert Objekt, erzeugt Objekt-Embedding, legt StateNode an, f�gt Index-Eintrag hinzu |
+| ''GetObject(string id)'' ? MatrixObject?                     | Liefert registriertes Objekt |
+| ''GetState(string id)'' ? StateNode?                         | Liefert aktuellen State |
+| ''SetState(string id, object? value, string user = "system")'' ? bool | Pr�ft Rolle, erzeugt Payload-Embedding, aktualisiert State, History, Index, benachrichtigt Subscriber |
+| ''Subscribe(string id, Action<StateNode> callback)''          | Registriert Change-Callback |
+| ''Unsubscribe(string id, Action<StateNode> callback)''        | Entfernt Callback |
+| ''SemanticQuery(string text, int k = 10)'' ? List<StateNode>  | Semantische Suche �ber Embeddings (Vektorindex) |
+| ''GetHistory(string id, DateTime? from, DateTime? to)''       | Liefert gefilterte History-Samples eines States |
+| ''DisplayAsJson()'' ? string                                  | Gibt Objektbaum inkl. aktueller Werte als JSON aus |
+| ''LoadSnapshotAsync(CancellationToken)''                      | L�dt Snapshot-Datei, rekonstruiert States/History/Embeddings |
+| ''WriteSnapshotAsync(CancellationToken)''                     | Schreibt alle History-Samples als JSONL-Datei (Append-Only-Format) |
+| ''StartCronSnapshot(TimeSpan interval)''                      | Startet periodischen Snapshot-Timer |
+| ''StopCronSnapshot()''                                        | Stoppt den Timer |
+
+===== Snapshot-Format (JSONL) =====
+
+Append-only, eine History-Sample pro Zeile, kompakt und schnell zu laden.
+Ideal f�r jahrelange Speicherung und sp�tere Auswertung (z. B. durch einen
+''history.0''-kompatiblen Adapter).
+
+<code json>
+{"Id":"temp.livingroom","Timestamp":"2026-09-29T12:57:00Z","Value":22.5,"Embedding":[0.12,0.88,...]}
+</code>
+
+Pfad: ''snapshot.jsonl'' im Anwendungsverzeichnis (siehe ''Startup/OnStart.cs'').
+
+===== Embedding-Dienst (Default) =====
+
+''HashingEmbeddingService'' erzeugt deterministische, L2-normierte Vektoren
+�ber einen Feature-Hashing-Ansatz (MD5-basiert, Tokenisierung nach
+Whitespace/Satzzeichen). F�r identischen Text entsteht immer derselbe Vektor.
+Dient als voll funktionsf�higer Platzhalter, austauschbar gegen ein echtes
+ML-Modell (ONNX, Sentence-Transformers etc.), ohne dass ''SemanticStateMatrix''
+angepasst werden muss (Interface ''IEmbeddingService'').
+
+Default-Dimension: **128**.
+
+===== Vektorindex (Default) =====
+
+''VectorIndex'' implementiert ''IVectorIndex'' als thread-sicheren
+Brute-Force-Kosinus-�hnlichkeits-Index (''ConcurrentDictionary<string,float[]>'').
+F�r die erwarteten Datenmengen einer Smarthome-Installation (zehntausende
+States) ausreichend performant. Kann sp�ter durch eine echte ANN-Struktur
+(z. B. HNSW) ersetzt werden.
+
+===== Rollen-/Berechtigungsdienst (Default) =====
+
+''DefaultRoleService'' gew�hrt standardm��ig vollen Zugriff. �ber
+''SetPermissions(user, stateId, canRead, canWrite)'' sowie Rollen- und
+Benutzerzuweisungen k�nnen gezielt Einschr�nkungen hinterlegt werden. Die
+Standardinstanz persistiert diese Regeln optional in ''roles.json''.
+
+===== Integration in MainRuntimeContext =====
+
+  * ''MainRuntimeContext.Matrix'' � die Singleton-Instanz der Matrix
+  * Initialisierung �ber ''InitializeMatrixAndBus(snapshotPath)'' in ''OnStart''
+  * ''LoadSnapshotAsync()'' beim Systemstart
+  * ''StartCronSnapshot(TimeSpan.FromMinutes(5))'' � periodischer Snapshot alle 5 Minuten
+  * ''WriteSnapshotAsync()'' beim Systemstopp (''OnStop'')

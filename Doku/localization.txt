@@ -1,0 +1,50 @@
+====== Lokalisierung (LocalizationService) ======
+
+Der ''LocalizationService'' (Namespace ''ioBroker_NewGen.Core.Localization'') ist fest in den Host eingebettet. Er liefert Übersetzungen für AdminUI, Matrix und Adapter.
+
+===== Konfiguration =====
+
+<code toml>
+[localization]
+language = "de_de"        # aktive Sprache (de_de, de-DE und de werden gleich behandelt)
+fallbackLanguage = "en_GB" # Rückfall für fehlende Schlüssel
+</code>
+
+===== Sprachdateien =====
+
+  * Ordner ''Localization/'' im Projekt, je Sprache eine Datei ''xx_YY.json'' (als Ressource eingebettet).
+  * Aktuell: de_DE, en_GB, fr_FR, es_ES, it_IT, nl_NL, pt_PT, pl_PL, cs_CZ, sk_SK, sl_SI, hr_HR, hu_HU, ro_RO, bg_BG, el_GR, da_DK, sv_SE, fi_FI, et_EE, lv_LV, lt_LT, ga_IE, mt_MT.
+  * Format: flaches (oder verschachteltes) JSON, z. B. ''{ "menu.dashboard": "Dashboard", "user.login": "Anmelden" }''.
+  * Ein Ordner ''Localization'' neben der Anwendung ergänzt/überschreibt Host-Schlüssel.
+  * Hinweis: Die Übersetzungen sind maschinell erstellt und sollten gegengelesen werden.
+
+===== Adapter-Übersetzungen =====
+
+Jeder Adapter darf optional eigene Sprachdateien mitbringen. Sie **erweitern** den Katalog der Sprache (de → de_DE, en → en_GB), **überschreiben aber nie** bestehende Schlüssel. Empfohlenes Präfix: ''adapter.<name>.''. Unbekannte Sprachen werden übersprungen.
+
+  - C#-Adapter, Eigenschaft ''Translations'' im ''IAdapter'': Sprache → (Schlüssel → Text).
+  - C#-Adapter, Ordner: ''IAdapter.LocalizationDirectory'' oder Standard ''Localization/'' neben der Adapter-DLL (Dateien ''de_DE.json'', ''en.json'' …).
+  - Node.js-Adapter: ''POST /api/i18n/extend'' mit ''{"language":"de_DE","translations":{...}}'' (Recht SystemConfigure).
+
+Die Übersetzungen werden vor ''InitializeAsync'' des Adapters registriert.
+
+===== API =====
+
+^ Route ^ Zugriff ^ Beschreibung ^
+| ''/api/i18n/languages'' | öffentlich | verfügbare Sprachen, aktive und Rückfallsprache |
+| ''/api/i18n/translations'' | öffentlich | alle Texte; optional POST ''{"language":"fr_FR"}'' |
+| ''/api/i18n/translate'' | öffentlich | POST ''{"key":"user.login","language":"en","args":[]}'' |
+| ''/api/i18n/extend'' | Login/Token | Adapter-Schlüssel ergänzen |
+
+Interne C#-Adapter nutzen ''context.Localization'' (''Translate'', ''Format'', ''GetAll'').
+
+===== Semantische Matrix =====
+
+  * Matrix-State ''system.localization.language'' enthält die aktive Sprache (Rolle ''language'') und wird bei Wechsel aktualisiert.
+  * ''matrix.Language'' und ''matrix.GetLocalizedValue(id)'' liefern Werte sprachabhängig (Booleans über ''value.true''/''value.false'', Zahlen und Datum in der Kultur der Sprache).
+
+===== Hinweise =====
+
+  * AdminUI: Sprach-Dropdown, Auswahl wird im Browser gespeichert; Standard ist die Config-Sprache.
+  * Serverfehlermeldungen (Login etc.) sind vorerst deutsch.
+  * Die Bridge zu Node.js-Adaptern hat kein i18n-Protokoll; dort die HTTP-API verwenden.

@@ -1,0 +1,90 @@
+====== Developer Guide ======
+
+===== Infrastruktur =====
+
+Das Projekt verwendet **RSEV.Utilities 3.0.0.0** als verbindliche Runtime-
+Infrastruktur. Eigene Implementierungen der Lifecycle-, Event- und
+Prozessverwaltung werden vermieden.
+
+  * ''BaseRuntimeContext'' liefert Config, Logger, AssemblyLoader,
+    TypeDiscovery, PluginRegistry, API-Host und ProcessController.
+  * ''BaseMessageBus'' und ''MessageBusRegistry'' verwalten Message-Bus-
+    Komponenten.
+  * ''BaseEventBus'' und ''EventRegistry<T>'' transportieren typisierte Events.
+  * ''RuntimeProcessController'' verwaltet isolierte Node.js-Prozesse.
+  * ''AssemblyLoader'' lädt CustomAdapter-Assemblies.
+  * ''AdapterPackageInstaller'' prüft lokale Paketmanifeste und SHA-256-Hashes.
+  * ''AdapterRepositoryClient'' lädt ZIP-Pakete aus einem Repository und prüft
+    SHA-256 sowie optional verpflichtende RSA-Signaturen gegen einen
+    konfigurierten Trust-Key.
+  * ''ReleaseCandidateBuilder'' kann Release-Manifeste mit RSA-SHA256 signieren
+    und gegen einen ausdrücklich übergebenen Trust-Key verifizieren.
+
+===== Lokaler Build =====
+
+<code>
+dotnet build
+dotnet run --project tests/IntegrationTests/IntegrationTests.csproj
+</code>
+
+Das Hauptprojekt targetiert ''net9.0''. Die verwendete RSEV.Utilities-DLL ist
+Version ''3.0.0.0''.
+
+===== Lifecycle =====
+
+  - ''FirstRun'' erstellt bzw. lädt ''config.toml''.
+  - ''OnStart'' initialisiert Matrix, MessageBus, EventBus, Bridge, Adapter-
+    Runtimes und Deployment-Struktur. Die AdminUI wird wie jeder andere
+    CustomAdapter aus ''Adapters/custom'' geladen.
+  - ''OnStop'' stoppt alle Runtimes, schreibt den Snapshot und erzeugt ein
+    verifiziertes SHA-256-Backup.
+
+===== Sicherheitsregeln =====
+
+  * Adapter-Assemblies werden nur aus dem konfigurierten Verzeichnis geladen.
+  * State-Zugriffe laufen über ''IRoleService''.
+  * Der Standarddienst ''DefaultRoleService'' verwaltet Benutzerregeln,
+    Rollen-Zuweisungen und persistiert sie optional in ''roles.json''.
+  * Die TCP-Bridge bindet standardmäßig nur auf ''127.0.0.1''.
+  * Backups löschen keine bestehenden Daten.
+  * Die Admin-API unterstützt ''X-Admin-Token'' und ''Authorization: Bearer''.
+
+===== Assembly-Layout =====
+
+Jeder native Adapter liegt als eigene DLL im konfigurierten Custom-Verzeichnis.
+Das gilt auch für ''AdminUI.dll''. Adapter dürfen in ''IAdapter.Dependencies''
+andere Adapter per Name oder ID anfordern; die Liste darf leer sein.
+''adapter.enabledAdapters'' steuert, welche geladenen Adapter beim Start
+aktiviert werden. ''legacyAutoStart'' steuert den optionalen Start von
+Node-Adapterverzeichnissen unter ''Adapters/IOBroker''.
+
+===== AdminUI als separates Adapterprojekt =====
+
+Der Admin-Adapter wird separat vom Host-Projekt unter
+''adapter/custom/dev/Admin'' entwickelt. Das Projekt referenziert die
+Host-Verträge über ''lib/ioBroker-NewGen.dll'' und ''lib/RSEV.Utilities.dll'';
+es enthält keine Kopie des Host-Runtimecodes. Das Projekt targetiert ''net9.0''.
+
+Der Build des Host-Projekts kopiert vorhandene Dateien aus
+''Adapters/custom'' in das Ausgabe- und Publish-Verzeichnis. Die DLL muss
+deshalb vor dem Host-Build unter ''Adapters/custom/AdminUI.dll'' liegen.
+Die Verzeichnisstruktur unter ''Adapters/custom'' bleibt dabei erhalten.
+Der Host lädt die Assembly als Custom-Adapter; ''[admin] adminEnabled'',
+''[admin] adminPort'' und ''adapter.enabledAdapters'' steuern Betrieb und
+Autostart. Die Oberfläche antwortet auf ''/'' sowie ''/index.html'' und
+''/admin''.
+
+README, Architekturübersicht und API-Routen des Admin-Projekts liegen neben
+dem Projekt unter ''adapter/custom/dev/Admin''. Änderungen am Host-Vertrag
+müssen sowohl mit der dort referenzierten ''ioBroker-NewGen.dll'' als auch mit
+dem Host-Projekt abgestimmt werden.
+
+Die AdminUI stellt für die Rollenverwaltung ''/api/permissions'',
+''/api/roles'' und ''/api/users'' bereit. Explizite Benutzerregeln haben
+Vorrang vor Rollenregeln; mehrere passende Rollen werden mit Deny-wins
+ausgewertet.
+
+Für signierte Remote-Pakete setzt ''adapter.requireSignedPackages = true''
+zusammen mit ''adapter.trustedPackagePublicKeyPem'' den vertrauenswürdigen
+RSA-Public-Key. Ohne diese Einstellung bleibt der optionale Signaturmodus für
+ältere Installationen kompatibel.

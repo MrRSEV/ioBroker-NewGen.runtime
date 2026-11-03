@@ -1,0 +1,24 @@
+====== Runtime & Lifecycle ======
+
+===== Start =====
+
+''MainRuntimeContext'' wird als Singleton aufgebaut. ''OnStart'' lädt die
+Konfiguration und initialisiert in dieser Reihenfolge:
+
+  - RSEV.Utilities-MessageBus und EventBus
+  - SemanticStateMatrix und Snapshot
+  - TCP-Bridge
+  - Node.js- und CustomAdapter-Runtime
+  - Adapter-Deployment-Struktur und BackupService
+  - AdminUI als normaler externer CustomAdapter über ''RuntimeApiHost''
+
+===== Stop =====
+
+''OnStop'' stoppt AdminUI/CustomAdapter, Node-Runtime und TCP-Bridge,
+schreibt den Matrix-Snapshot und erzeugt anschließend ein SHA-256-verifiziertes
+Backup. Danach werden MessageBus und EventBus kontrolliert heruntergefahren.
+
+===== Unerwartete Beendigung =====
+
+''UnexpectedUserExitHandler'' behandelt CTRL+C sowie Windows-Exit-Ereignisse
+und führt den gleichen OnStop-Pfad mit Timeout-Schutz aus.

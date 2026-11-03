@@ -1,0 +1,20 @@
+{
+  "name": "@iobroker/adapter-core",
+  "version": "3.2.3",
+  "description": "Drop-in-Ersatz für @iobroker/adapter-core ohne js-controller (ioBroker-NewGen TCP-Bridge)",
+  "main": "index.js",
+  "license": "MIT",
+  "files": [
+    "*.js",
+    "vendor/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "build": "node build-package.js",
+    "pack:package": "node build-package.js --pack"
+  }
+}

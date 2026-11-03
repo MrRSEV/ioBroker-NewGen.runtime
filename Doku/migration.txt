@@ -1,0 +1,37 @@
+====== Adaptermigration ======
+
+Der Migrationskatalog in ''Core/Migration/AdapterMigrationCatalog.cs'' ist die
+verbindliche Quelle für Sprint 7, 9 und 10.
+
+===== Native Phase 1 =====
+
+  * MQTT: MQTT 3.1.1, QoS 0, lokales Wire-Fixture
+  * Zigbee: Zigbee2MQTT über MQTT, lokales MQTT-Fixture
+  * Philips Hue: lokale Hue HTTP API v1, lokales HTTP-Fixture
+  * Shelly: Gen2 RPC/HTTP, lokales HTTP-Fixture
+
+===== Native Phase 2 und 3 =====
+
+Die folgenden Adapter sind als eigene DLLs vorhanden und über konfigurierbare
+Protokollverträge ansprechbar. Lokale HTTP-/UDP-/TCP-Fixtures prüfen die
+Protokoll- und State-Mappings; reale Gerätevarianten bleiben die nächste Abnahme:
+
+  * FRITZ!Box: TR-064 DeviceInfo über SOAP/HTTP
+  * Bosch: Smart-Home-Controller-Items über REST/JSON
+  * KNX: KNXnet/IP-Tunneling-Datagramme
+  * Modbus: Modbus TCP, Holding Register und Single Register
+  * Homematic: CCU XML-API
+  * Alexa: konfigurierbarer REST-Gateway-Endpunkt mit Bearer-Token
+
+Die Ausführung bleibt über ''IAdapter'' und den AssemblyLoader vom Host getrennt.
+Die Integrationstests decken damit FRITZ!Box, Bosch, KNX, Modbus, Homematic und
+Alexa mit lokalen Protokoll-Fixtures ab. Reale Geräte-Fixtures und
+Authentifizierungsabnahmen sind weiterhin erforderlich.
+
+===== Noch zu spezifizieren =====
+
+Die produktive Geräteabnahme, insbesondere konkrete Zugangsdatenmodelle,
+Gerätevarianten und vollständige Register-/State-Mappings, bleibt vor dem
+Release-Candidate erforderlich. Der Migrationskatalog kennzeichnet die lokalen
+Implementierungen als ''native-verified''; die Hardware-/Cloud-Abnahme ist davon
+getrennt und weiterhin offen.

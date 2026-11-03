@@ -1,0 +1,94 @@
+====== Core/Security – Benutzer, Rollen, Sitzungen ======
+
+Namespace: ''ioBroker.Core.Security'' (Ordner ''Core/Security'')
+
+Speicher: SQLite ''data/security.db'' (relativ zum Programmverzeichnis).
+Passwörter: BCrypt. Sitzungen: Bearer-Token (32 Zufallsbytes), in der DB nur als
+SHA-256-Hash gespeichert, Gültigkeit 1440 Minuten (gleitend).
+
+===== Komponenten =====
+
+  * ''SecurityDatabase'' – Schema, Seed der Rechte und Standardrollen
+  * ''UserManager'' (''IUserManager'') – Anlegen, Löschen, Passwort, Rollenabfrage
+  * ''RoleManager'' – Rollen zuweisen/entziehen
+  * ''PermissionManager'' (''IAuthorizationProvider'') – ''HasPermissionAsync''
+  * ''Authentication'' (''IAuthenticationProvider'') – Login, Logout, Sitzungsprüfung
+  * ''SessionManager'', ''AuditManager'', ''SecurityMatrixMirror''
+  * ''SecurityService'' – Fassade; Zugriff über ''MainRuntimeContext.Security''
+
+===== Datenbankzugriff =====
+
+Der Zugriff läuft über RSEV.Utilities, nicht über direkten SQLite-Code:
+
+  * ''SecurityDatabase'' erzeugt Verbindungen über ''RSEV.Utilities.Connection.ConnectionFactory''
+    mit ''RSEV.Utilities.Database.SqliteAdapter'' und einer ''ConnectionConfiguration''
+    (Provider ''Microsoft.Data.Sqlite'', Connection-String mit ''Foreign Keys'').
+  * ''SqliteAdapter'' löst den Provider über ''DbProviderFactories'' auf. Deshalb registriert
+    ''SecurityDatabase'' einmalig ''SqliteFactory'' (NuGet ''Microsoft.Data.Sqlite''); das Paket
+    wird weiterhin benötigt, RSEV.Utilities liefert nur den Adapter.
+  * Alle Manager nutzen nur die allgemeinen Typen ''DbConnection'', ''DbCommand'' und
+    ''DbDataReader''. Parameter werden über ''AddParameter'' (''DbCommandExtensions'') gesetzt.
+  * Pro Operation wird eine neue Verbindung geöffnet und per ''await using'' freigegeben;
+    das Pooling übernimmt ''Microsoft.Data.Sqlite''. Der RSEV-''ConnectionManager'' wird nicht
+    verwendet.
+  * Nur die Initialisierung (Schema, Seed) läuft in einer Transaktion; mehrstufige Abläufe
+    wie „Benutzer anlegen und Rollen zuweisen“ sind nicht atomar.
+
+===== Rollen =====
+
+Viewer → Operator → Developer → Administrator (jeweils mit Vererbung; beim
+Seed in ''RolePermissions'' aufgelöst).
+
+===== Bootstrap =====
+
+Existiert kein Benutzer, wird ''admin''/''admin'' mit der Rolle Administrator und
+Pflicht zur Passwortänderung angelegt (Event ''SecurityBootstrapCreated'').
+**Das Standardpasswort muss sofort geändert werden.** Login liefert
+''MustChangePassword = true''; die AdminUI erzwingt dann den Passwortwechsel
+(siehe nächster Abschnitt).
+
+===== AdminUI-Anmeldung (Cookie) =====
+
+Die AdminUI nutzt Core.Security statt eines Admin-Tokens:
+
+  * ''POST /api/auth/login'' (''{"username","password"}'') setzt das Cookie
+    ''ngsession'' (HttpOnly, SameSite=Strict, Path=/, Laufzeit = Sitzungs-Timeout).
+    Der Wert ist das Sitzungstoken; in der DB steht nur dessen Hash.
+  * ''POST /api/auth/logout'' widerruft die Sitzung und löscht das Cookie.
+  * ''GET /api/auth/me'' liefert Benutzer, Rollen und ''mustChangePassword''.
+  * ''POST /api/auth/change-password'' (''{"currentPassword","newPassword"}'') ändert
+    das Passwort, beendet alle Sitzungen und stellt direkt ein neues Cookie aus.
+  * Bei ''MustChangePassword'' sind alle anderen Endpunkte gesperrt (403), bis das
+    Passwort geändert wurde.
+  * Berechtigungen je Endpunkt: z. B. ''/api/states'' → StateRead, ''/api/adapters/start''
+    → AdapterStart, ''/api/config'' lesen → SystemRead, schreiben → SystemConfigure,
+    ''/api/users'' → UserRead/UserManage, ''/api/roles'' → RoleRead/RoleManage.
+    Fehlende Sitzung → 401, fehlendes Recht → 403.
+  * CSRF-Schutz: SameSite=Strict und für alle Anfragen mit Body der Header
+    ''X-Requested-With'' (setzt die Oberfläche automatisch).
+  * Falsche Anmeldungen werden um 500 ms verzögert und als Fehlversuch gezählt.
+  * Das Cookie hat kein ''Secure''-Flag, solange die AdminUI ohne TLS läuft; bei
+    Betrieb über das Netz TLS bzw. einen Reverse-Proxy verwenden.
+  * Der optionale ''admin.adminToken'' (Header ''X-Admin-Token'' / Bearer) bleibt für
+    Automatisierung erhalten und ist bei leerem Wert deaktiviert.
+
+===== Events (SystemEventBus) =====
+
+''UserCreatedEvent'', ''UserDeletedEvent'', ''UserLoginEvent'', ''UserLogoutEvent'',
+''RoleAssignedEvent'', ''RoleRemovedEvent'', ''SecurityBootstrapCreated''.
+
+===== Matrix-Spiegel =====
+
+  * ''system.security.users.{username}.online''
+  * ''system.security.users.{username}.lastLogin''
+  * ''system.security.activeSessions''
+  * ''system.security.failedLogins''
+
+Passwörter, Hashes, Token, API-Keys und Secrets werden nie gespiegelt.
+
+===== Stand =====
+
+  * v1: SQLite, Benutzer, Rollen, Rechte, Sitzungen, Audit-Schreiben – umgesetzt
+  * Tabelle ''ApiKeys'' ist angelegt, die Verwaltung folgt in v2
+  * AdminUI-Anmeldung per Cookie umgesetzt; Menü Administration (Benutzer, Sitzungen, Audit) steht noch aus
+  * Passwortrichtlinie: derzeit nur Mindestlänge 8 und höchstens 72 Bytes

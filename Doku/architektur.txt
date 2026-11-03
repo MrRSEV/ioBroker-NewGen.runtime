@@ -1,0 +1,137 @@
+====== Architekturübersicht ======
+
+===== Schichtenmodell =====
+
+<code>
+                ┌─────────────────────────────┐
+                │ AdminUI.dll (CustomAdapter) │   (Sprint 5)
+                └──────────────┬──────────────┘
+                               │
+                ┌──────────────┴──────────────┐
+                │    SemanticStateMatrix      │   Core/Matrix
+                │ (Objekte, States, History,  │
+                │  Embeddings, Vektorindex)   │
+                └──────────────┬──────────────┘
+                               │ Subscribe / SetState
+                ┌──────────────┴──────────────┐
+                │     SystemMessageBus        │   Core/Bus
+                │  (BusFrame Publish/Sub)     │
+                └──────────────┬──────────────┘
+                               │ Route()
+                ┌──────────────┴──────────────┐
+                │       AdapterRouter         │   Core/Routing
+                └──────┬───────────────┬──────┘
+                       │               │
+             AdapterType.Custom   AdapterType.IoBroker
+                       │               │
+          ┌────────────┴───────┐  ┌────┴─────────────────┐
+          │ CustomAdapter-DLLs │  │   TcpBridgeServer    │  Core/Bridge
+          │ (C#, extern,       │  │ (Handshake, Framing, │
+          │  Dependencies)     │  │  Publish/Receive)    │
+          └────────────────────┘  └────┬─────────────────┘
+                                       │ verwaltet
+                              ┌────────┴──────────────────┐
+                              │    NodeAdapterRuntime     │  Core/Bridge
+                              │ (Crash-Recovery,          │
+                              │  Heartbeat, basiert auf   │
+                              │  RSEV.Utilities.Processes)│
+                              └────────┬──────────────────┘
+                                       │ startet/überwacht
+                              ┌────────┴──────────────────┐
+                              │  Node.js-Adapter-Prozess  │
+                              │ (isoliert, pro Adapter)   │
+                              └───────────────────────────┘
+
+          Alle Adapter werden zentral in der AdapterRegistry (Core/Registry)
+          verwaltet: Name, Id ("Name.id"), Type, Status, TcpEndpoint/InstanceReference.
+
+          Querschnitt: Core/Security (SQLite) stellt Benutzer, Rollen, Rechte und
+          Sitzungen bereit und meldet Ereignisse über den SystemEventBus; unkritische
+          Zustände werden unter system.security.* in die Matrix gespiegelt.
+</code>
+
+===== Zentrale Bausteine =====
+
+==== Externe Adapter-Assemblies ====
+
+Alle nativen Adapter werden außerhalb des Host-Binaries als eigene DLL geladen:
+''AdminUI.dll'', ''MqttAdapter.dll'', ''ZigbeeAdapter.dll'', ''HueAdapter.dll'',
+''ShellyAdapter.dll'', ''FritzBoxAdapter.dll'', ''BoschAdapter.dll'',
+''KnxAdapter.dll'', ''ModbusAdapter.dll'', ''HomematicAdapter.dll'' und
+''AlexaAdapter.dll''. Der ''CustomAdapterRuntime'' registriert die Instanzen,
+wertet ''IAdapter.Dependencies'' aus und aktiviert nur die in
+''adapter.enabledAdapters'' konfigurierten Adapter.
+
+==== MainRuntimeContext ====
+
+''Controllers/MainRuntimeContext.cs''
+
+Applikationsweiter Singleton-RuntimeContext (erbt von ''RSEV.Utilities.Runtime.BaseRuntimeContext'').
+Hält zentrale Infrastruktur-Instanzen, auf die alle Lifecycle-Hooks
+(''IFirstRun'', ''IOnStart'', ''IOnStop'') zugreifen:
+
+  * **Logger** – eigener ''SystemLog'', schreibt ''latest.log'' ins Basisverzeichnis
+  * **Config** – ''ConfConfig'' (RSEV.Utilities-Konfigurationsregister, key/value aus ''config.toml'')
+  * **Matrix** – ''SemanticStateMatrix'' Instanz (Property ''Matrix'')
+  * **SystemBus** – ''SystemMessageBus'' Instanz, registriert in ''MessageBusRegistry''
+  * **SystemEventBus** – ''SystemEventBus'' Instanz (State-, Adapter- und Security-Events)
+  * **AdapterRouter** – ''AdapterRouter'' Instanz
+  * **AdapterRegistry** – ''AdapterRegistry'' Instanz (Sprint 2)
+  * **TcpBridge** – ''TcpBridgeServer'' Instanz, gestartet in ''OnStart'' (Sprint 2)
+  * **NodeRuntime** – ''NodeAdapterRuntime'' Instanz, gestartet in ''OnStart'' (Sprint 2)
+  * **Security** – ''SecurityService'' Instanz, initialisiert in ''OnStart'' (beta0.3, siehe [[core-security]])
+  * **Localization** – ''LocalizationService'' (''MainRuntimeContext.Localization''), eingebettete Sprachdateien, Sprache aus ''[localization]''; genutzt von Matrix, AdminUI und Adaptern (siehe [[localization]])
+
+Initialisierung von Matrix/Bus/Router/Registry über ''InitializeMatrixAndBus(snapshotPath)'',
+TCP-Bridge über ''StartTcpBridgeAsync(port)'', Node-Runtime über ''InitializeNodeRuntime()'',
+Security über ''InitializeSecurityAsync()'' –
+alle aufgerufen in ''Startup/OnStart.cs''. Shutdown über ''ShutdownBridgeAndNodeRuntimeAsync()''
+in ''Startup/OnStop.cs''.
+
+==== Lifecycle-Ablauf (Main.cs) ====
+
+  - ''MainRuntimeContext.Instance'' wird erzeugt (Logger, Config, GlobalState etc. werden dabei initialisiert)
+  - Prüfung: Existiert ''config.toml''? → Wenn nein: **FirstRun** (siehe [[runtime-lifecycle]])
+  - **OnStart** wird ausgeführt: Config laden, Matrix/Bus/Router/Registry initialisieren,
+    Snapshot laden, Cron-Snapshot starten, **TCP-Bridge starten, Node-Runtime initialisieren**,
+    **Security-Datenbank öffnen und ggf. Standardadministrator anlegen**
+  - ''UnexpectedUserExitHandler'' registriert CTRL+C / Windows-Exit-Handler
+  - Kommando-Loop läuft, bis ''exit'' eingegeben wird oder ein Abbruchsignal eintrifft
+  - **OnStop** wird ausgeführt: TCP-Bridge & Node-Runtime gestoppt, finaler Snapshot wird
+    geschrieben, System wird sauber beendet
+
+===== Namespace-Struktur =====
+
+<code>
+ioBroker-NewGen/
+├── Controllers/
+│   └── MainRuntimeContext.cs
+├── Core/
+│   ├── Matrix/      – semantische Zustands- und Referenzmatrix
+│   ├── Bus/         – Systembus (BusFrame, SystemMessageBus)
+│   ├── Routing/     – AdapterRouter, AdapterType
+│   ├── Registry/    – AdapterRegistry, AdapterRegistration, AdapterStatus (Sprint 2)
+│   ├── Bridge/      – TCP-Bridge-Protokoll, Server, Node.js-Adapter-Runtime (Sprint 2)
+│   └── Security/    – Benutzer, Rollen, Sitzungen, Audit (ioBroker.Core.Security, beta0.3)
+├── Startup/
+│   ├── FirstRun.cs
+│   ├── OnStart.cs
+│   ├── OnStop.cs
+│   ├── ConfigCreator.cs
+│   └── ConfigLoader.cs
+├── Runtime/
+│   ├── UnexpectedUserExitHandler.cs
+│   └── ShutdownSummary.cs
+└── Main.cs
+</code>
+
+===== Verwendete RSEV.Utilities-Bausteine =====
+
+  * ''RSEV.Utilities.Runtime.BaseRuntimeContext'' / ''IRuntimeContext'' – Basis für ''MainRuntimeContext''
+  * ''RSEV.Utilities.Configuration.ConfConfig'' / ''IConfig'' – Key/Value-Konfigurationsregister
+  * ''RSEV.Utilities.Logging.SystemLog'' / ''ILogger'' – Datei- und Konsolen-Logging
+  * ''RSEV.Utilities.Messaging.BaseMessageBus'' / ''IMessageBus'' / ''MessageBusRegistry'' – Lifecycle-Gerüst für den SystemBus
+  * ''RSEV.Utilities.Events.BaseEventBus'' / ''EventRegistry<T>'' – Basis des SystemEventBus (inkl. Security-Events)
+  * ''RSEV.Utilities.Lifecycle.IFirstRun'' / ''IOnStart'' / ''IOnStop'' – Lifecycle-Hooks
+  * ''RSEV.Utilities.Processes.NodeProcess'' / ''RuntimeSubprocessBase'' / ''RuntimeProcessController'' –
+    Prozessverwaltung für isolierte Node.js-Adapter (Sprint 2, siehe [[core-bridge]])

@@ -1,0 +1,34 @@
+====== Core/Bus – Systembus ======
+
+Namespace: ''ioBroker_NewGen.Core.Bus''
+
+Der Systembus transportiert ''BusFrame''-Payloads neutral zwischen Adaptern,
+Bridge und Matrix. Die Publish-/Subscribe-Infrastruktur stammt aus
+RSEV.Utilities 3.0.0 ''EventRegistry<T>''; der Projektcode implementiert keine
+eigene EventRegistry.
+
+===== BusFrame =====
+
+  * ''AdapterId'': Sender oder Ziel im Format ''Name.id''
+  * ''Address'': logische State-/Topic-Adresse
+  * ''Payload'': Rohdaten als ''ReadOnlyMemory<byte>''
+  * ''ValueType'': Payloadtyp wie ''double'', ''bool'', ''json'' oder ''raw''
+  * ''Kind'': ''Raw'', ''StateUpdate'', ''Command'' oder ''Event''
+  * ''Timestamp'': UTC-Zeitpunkt
+  * ''Metadata'': optionale Key/Value-Daten
+
+===== SystemMessageBus =====
+
+''SystemMessageBus'' erbt von RSEV.Utilities ''BaseMessageBus'' und delegiert
+Frames an eine RSEV-''EventRegistry<BusFrame>''. Die vorhandene
+Adress-Kompatibilitäts-API unterstützt konkrete Adressen und ''*'' als Wildcard.
+
+===== Datenfluss =====
+
+  - Ein Adapter erzeugt einen ''BusFrame''.
+  - Der ''AdapterRouter'' entscheidet intern oder TCP-Bridge.
+  - ''StateUpdate''-Frames werden von der Matrix dekodiert und als State
+    gespeichert.
+  - ''Command''-Frames werden an den Zieladapter weitergeleitet.
+
+Subscriber-Fehler werden geloggt und beenden den Bus nicht.

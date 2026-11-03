@@ -1,0 +1,104 @@
+[node]
+firstrun = false
+nodeId = "newgen-node-01"
+instanceName = "NewGenRuntime"
+environment = "prod"
+basePath = "/var/newgen"
+tempPath = "/var/newgen/tmp"
+maxParallelAdapters = 8
+shutdownTimeoutSeconds = 10
+runtimeMode = "standalone"
+
+[adapter]
+adapterDirectory = "/var/newgen/adapters"
+customAdapterDirectory = "Adapters/custom"
+adapterRootPath = "Adapters"
+enabledAdapters = ["admin"]
+requireSignedPackages = false
+trustedPackagePublicKeyPem = ""
+legacyAutoStart = false
+adapterAutoStart = true
+adapterIsolationMode = "process"
+adapterSandboxing = true
+adapterMaxMemoryMB = 256
+adapterMaxCpuPercent = 50
+adapterStartupTimeoutMs = 3000
+adapterCrashRestartDelayMs = 2000
+adapterHealthCheckIntervalMs = 5000
+adapterApiVersion = "1.0"
+
+[state]
+statePersistenceMode = "jsonl"
+stateFilePath = "snapshot.jsonl"
+stateAutosaveIntervalMs = 300000
+stateMaxHistoryEntries = 500
+stateSchemaVersion = "1.0"
+stateCompression = false
+
+[ipc]
+ipcMode = "tcp"
+ipcHost = "127.0.0.1"
+ipcPort = 5001
+busQueueSize = 10000
+busMaxFrameSize = 65536
+busRetryIntervalMs = 200
+busMaxSubscribers = 128
+
+[admin]
+adminEnabled = true
+adminPort = 8080
+adminRequireAuthentication = true
+adminToken = ""
+
+[mqtt]
+host = "127.0.0.1"
+port = 1883
+clientId = "newgen-mqtt"
+username = ""
+password = ""
+useTls = false
+keepAliveSeconds = 30
+topicFilter = "#"
+addressPrefix = "mqtt"
+
+[zigbee]
+host = "127.0.0.1"
+port = 1883
+clientId = "newgen-zigbee"
+username = ""
+password = ""
+useTls = false
+keepAliveSeconds = 30
+topicFilter = "zigbee2mqtt/#"
+baseTopic = "zigbee2mqtt"
+
+[hue]
+bridgeUri = "http://127.0.0.1"
+apiKey = ""
+pollIntervalMs = 10000
+
+[shelly]
+deviceUri = "http://127.0.0.1"
+switchId = 0
+pollIntervalMs = 5000
+
+[localization]
+language = "de_de"
+fallbackLanguage = "en_GB"
+
+[logging]
+logLevel = "info"
+logPath = "/var/newgen/logs"
+logFileRotationMB = 10
+logRetentionDays = 14
+enableStructuredLogging = true
+enableAdapterLogs = true
+adapterLogPath = "/var/newgen/logs/adapters"
+
+[security]
+allowRemoteControl = false
+remoteControlToken = ""
+adapterExecutionWhitelist = ["ha", "mqtt", "zigbee"]
+adapterExecutionBlacklist = ["debug"]
+sandboxFileAccessPolicy = "restricted"
+sandboxNetworkPolicy = "local-only"
