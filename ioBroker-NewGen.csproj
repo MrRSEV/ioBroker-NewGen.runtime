@@ -36,6 +36,31 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.*" />
   </ItemGroup>
 
+  <!-- Moves all dependency DLLs into <output>\lib; resolved at runtime by Startup\DependencyResolver.cs -->
+  <Target Name="MoveDependenciesToLib" AfterTargets="Build;CopyFilesToOutputDirectory" Condition="'$(OutDir)' != ''">
+    <ItemGroup>
+      <DependencyDll Include="$(OutDir)*.dll" Exclude="$(OutDir)$(TargetFileName)" />
+    </ItemGroup>
+    <Copy SourceFiles="@(DependencyDll)" DestinationFolder="$(OutDir)lib" SkipUnchangedFiles="true" />
+    <Delete Files="@(DependencyDll)" />
+  </Target>
+
+  <Target Name="MoveDependenciesToLibForPublish" AfterTargets="Publish">
+    <ItemGroup>
+      <PublishDependencyDll Include="$(PublishDir)*.dll" Exclude="$(PublishDir)$(TargetFileName)" />
+    </ItemGroup>
+    <Copy SourceFiles="@(PublishDependencyDll)" DestinationFolder="$(PublishDir)lib" SkipUnchangedFiles="true" />
+    <Delete Files="@(PublishDependencyDll)" />
+  </Target>
+
+  <Target Name="CreateLogDirectory" AfterTargets="Build;CopyFilesToOutputDirectory" Condition="'$(OutDir)' != ''">
+    <MakeDir Directories="$(OutDir)log" />
+  </Target>
+
+  <Target Name="CreateLogDirectoryForPublish" AfterTargets="Publish">
+    <MakeDir Directories="$(PublishDir)log" />
+  </Target>
+
   <Target Name="BuildExternalAdapterAssembliesForPublish" BeforeTargets="Publish">
     <MSBuild Projects="@(ExternalAdapterProject)" Targets="Build" BuildInParallel="true" Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework)" />
   </Target>

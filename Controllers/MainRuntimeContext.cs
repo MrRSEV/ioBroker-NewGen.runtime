@@ -381,7 +381,7 @@ namespace ioBroker_NewGen.Controllers
         /// </summary>
         protected override ILogger CreateLogger()
         {
-            var logger = new SystemLog(AppContext.BaseDirectory);
+            var logger = new SystemLog(Path.Combine(AppContext.BaseDirectory, "log"));
             logger.Init();
             return logger;
         }

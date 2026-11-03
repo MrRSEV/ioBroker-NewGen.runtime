@@ -1,5 +1,7 @@
 # ioBroker-NewGen.core
 
+> **Unofficial community project.** This project is not affiliated with or endorsed by the official ioBroker project.
+>
 > Core application of **ioBroker-NewGen**. Project vision, goals and overall architecture: see the [repository README](../README.md).  
 > Current status: **1.0.0-beta**.
 

@@ -1,5 +1,7 @@
 # Legacy AdapterCore (`@iobroker/adapter-core`-Shim)
 
+> **Inoffizielles Community-Projekt.** Dieses Projekt ist kein offizielles ioBroker-Projekt und steht nicht mit dem offiziellen ioBroker-Projekt in Verbindung.
+
 Emuliert `require('@iobroker/adapter-core')` ohne js-controller. Die gesamte Kommunikation läuft
 über den unveränderten [`NodeAdapterClient`](../NodeAdapterClient.js) (TCP-Bridge, `Frame`-Nachrichten).
 Der Adapter enthält keine eigene TCP-Logik; Heartbeats verwaltet der Client.
