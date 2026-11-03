@@ -1,7 +1,7 @@
 # ioBroker-NewGen.core
 
 > Core application of **ioBroker-NewGen**. Project vision, goals and overall architecture: see the [repository README](../README.md).  
-> Current status: **dev0.4.2**.
+> Current status: **1.0.0-beta**.
 
 The core hosts the Matrix, state-sync engine, routing, security and the adapter runtime. It uses **RSEV.Utilities 3.0.0.0** as its lifecycle, messaging, event, process and assembly-loading infrastructure. AdminUI and all native adapters run as separate external assemblies under `Adapters/custom`.
 
