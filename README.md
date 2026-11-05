@@ -1,213 +1,87 @@
-# ioBroker-NewGen.core
+# ioBroker-NewGen Unofficial community project
 
-> **Unofficial community project.** This project is not affiliated with or endorsed by the official ioBroker project.
->
-> Core application of **ioBroker-NewGen**. Project vision, goals and overall architecture: see the [repository README](../README.md).  
-> Current status: **1.0.0-beta**.
+> This project is not affiliated with or endorsed by the official ioBroker project.
 
-The core hosts the Matrix, state-sync engine, routing, security and the adapter runtime. It uses **RSEV.Utilities 3.0.0.0** as its lifecycle, messaging, event, process and assembly-loading infrastructure. AdminUI and all native adapters run as separate external assemblies under `Adapters/custom`.
+## Vision
 
-Every adapter start, stop and error state (custom and legacy) is written to the log. The admin dashboard is served on the configured `admin.adminPort` (default `8080`) at `/`, `/index.html` and `/admin`.
+**ioBroker-NewGen** is a modern, stable, and object‑oriented C# smart home system built around a **neuronal storage** — a semantic vector matrix without any intelligence.  
+Objects, states, history samples, and metadata are *materialized views* extracted from this vector space.
 
-The drop-in `@iobroker/adapter-core` replacement lives in `Legacy/AdapterCore`.
+The goal is a clean separation between core logic, adapter runtime, routing, and user interface.
 
----
-# Neuronal Storage (Semantic Vector Matrix)
+### Primary Goals
+- Replace the historical ioBroker architecture with a modern C# state matrix  
+- Isolated Node.js runtimes for legacy adapters  
+- Drop-in `@iobroker/adapter-core` replacement so unmodified legacy adapters run without js-controller over the TCP bridge  
+- Unified adapter API for all adapter types  
+- Stable, object‑oriented real‑time state‑sync engine  
+- New admin UI in C#  
+- Long‑term migration of popular ioBroker adapters to C#
 
-The **Matrix** is not an object.  
-It is a **semantic vector space** — a neuronal storage layer that holds embeddings for objects, states, and history samples.
+### Secondary Goals
+- Compatibility with existing ioBroker adapters (up to 10 simultaneously)  
+- Minimal hardware requirements for Raspberry Pi 5  
+- Clean separation between internal and external routing  
+- Modular, extensible, future‑proof system design
 
-All visible structures (ObjectTree, StateNodes, History) are **projections** or **materialized views** derived from this vector space.
+## Architecture
 
-## Matrix
+- **Neuronal storage (Matrix):** a semantic vector space holding embeddings for objects, states and history samples. ObjectTree, StateNodes and History are projections (materialized views) of it.
+- **Core:** hosts the Matrix, state-sync engine, routing, security/roles, localization and the adapter runtime. It uses **RSEV.Utilities 3.0.0.0** for lifecycle, messaging, events, process and assembly loading.
+- **Adapters:** Native adapters, including the optional AdminUI, run as separate external assemblies and are loaded by the core when present. Legacy ioBroker (Node.js) adapters run in isolated Node.js processes and talk to the core over a TCP bridge.
+- **Legacy compatibility:** `NodeAdapterRuntime.Api` provides `sendTo`, state/object subscriptions, notifications, metadata, adapter-scoped file storage, central web endpoint registration and process lifecycle services. Legacy adapters do not start their own web server.
 
-### Description
-Central semantic vector matrix for objects, states, embeddings, history, and persistence.  
-It acts as a high‑dimensional storage layer without any intelligence.
+## External Web Adapter
 
-### Components
-- **objects** — materialized object views  
-- **states** — materialized state views  
-- **subscriptions** — callbacks for state changes  
-- **roleService** — permission validation  
-- **embeddingService** — text/payload embedding generator  
-- **semanticIndex** — vector index (e.g., HNSW)  
-- **snapshotPath** — path to JSONL snapshot file
+HTTP- und WebSocket-Listener werden durch den separat gepflegten nativen
+Adapter [`ioBroker-NewGen.web`](https://github.com/MrRSEV/ioBroker-NewGen.web)
+bereitgestellt. Native und Legacy-Adapter registrieren Endpunkte nur über
+`IWebEndpointRegistry`; `RuntimeApiHost` und `WebHostService.cs` sind für
+installierte Adapter gesperrt.
+Der optionale `AdminUI.dll` registriert seine Routen ebenfalls über diesen
+Vertrag; der Listener bleibt im separaten Web-Adapter und verwendet
+`web.listenHost`/`web.port` (Standard `127.0.0.1:8080`).
 
-### Lifecycle
-- **OnStart**  
-  Loads snapshot, reconstructs history samples, rebuilds embeddings, repopulates semantic index.
-- **OnStop**  
-  Writes a complete snapshot of all history samples.
-- **CronSnapshot**  
-  Periodically writes incremental snapshots.
+## Optional native AdminUI adapter
 
-### API
-- **RegisterObject(MatrixObject) -> bool**  
-  Generates object embedding, inserts into semantic index, creates a StateNode view.
+The core does not compile or require `AdminUI.dll`. A developer can download
+the native AdminUI adapter from the separate GitHub repository
+[`MrRSEV/ioBroker-NewGen.admin`](https://github.com/MrRSEV/ioBroker-NewGen.admin),
+build it there, and copy the resulting `AdminUI.dll` manually to
+`Adapters/native`. The core then discovers it like any other native adapter;
+without that DLL, a fresh clone still builds and runs without the AdminUI. The
+release builder includes a separately built `AdminUI.dll` automatically in
+release binaries when it is available in the workspace.
 
-- **GetObject(string id) -> MatrixObject**  
-  Returns the materialized object view.
+## Repository Structure
 
-- **GetState(string id) -> StateNode**  
-  Returns the materialized state view.
+| Folder | Content |
+|--------|---------|
+| [ioBroker-NewGen.core](./ioBroker-NewGen.core) | Core application: Matrix, data structures, adapter configuration, legacy adapter runtime. See its [README](./ioBroker-NewGen.core/README.md). |
+| [ioBroker-NewGen.adapters](./ioBroker-NewGen.adapters) | Native C# adapters (`native`). `legacy` holds local legacy ioBroker sources and is not tracked. |
 
-- **SetState(string id, object value, string user) -> bool**  
-  Validates permissions, generates payload embedding, updates state view, appends history sample, updates semantic index, triggers subscriptions.
+## MIT License
 
-- **Subscribe(string id, Action<StateNode>)**  
-  Registers a callback for state changes.
+The MIT License (MIT)
 
-- **SemanticQuery(string text, int k) -> List<StateNode>**  
-  Encodes text into an embedding and performs k‑NN search.
+Copyright (c) 2014–2026 bluefox <dogafox@gmail.com>,  
+Copyright (c) 2014 hobbyquaker  
+Copyright (c) 2026 MrRSEV – Richard Schumacher
 
-- **GetHistory(string id, DateTime? from, DateTime? to)**  
-  Returns history samples for the history.0 adapter.
+Permission is hereby granted, free of charge, to any person obtaining a copy  
+of this software and associated documentation files (the "Software"), to deal  
+in the Software without restriction, including without limitation the rights  
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell  
+copies of the Software, and to permit persons to whom the Software is  
+furnished to do so, subject to the following conditions:
 
-- **DisplayAsJson() -> string**  
-  Outputs the materialized object tree as JSON.
+The above copyright notice and this permission notice shall be included in  
+all copies or substantial portions of the Software.
 
-- **WriteSnapshot()**  
-  Persists all history samples as JSONL.
-
----
-
-# Core Data Structures
-
-## MatrixObject
-
-### Description
-Represents a device, channel, or datapoint.  
-It is a **materialized projection** of embeddings stored in the Matrix.
-
-### Fields
-- **Id** — string  
-- **Name** — string  
-- **Type** — string  
-- **Meta** — dictionary of metadata
-
-### Embedding
-- **source**: `Id + Name + Type + Meta`  
-- **usage**: semantic identity of the object
-
----
-
-## StateNode
-
-### Description
-Materialized view of the current state of an object.
-
-### Fields
-- **Id** — string  
-- **Value** — object  
-- **Timestamp** — DateTime  
-- **Embedding** — float[]  
-- **Meta** — metadata dictionary  
-- **History** — queue of history samples
-
-### Responsibilities
-- Holds current value  
-- Holds semantic payload embedding  
-- Holds history samples  
-- Is indexed in the vector index
-
----
-
-## HistorySample
-
-### Description
-Represents a historical state value with timestamp and embedding.
-
-### Fields
-- **Id** — string  
-- **Timestamp** — DateTime  
-- **Value** — object  
-- **Embedding** — float[]
-
-### Usage
-- Persistent time series  
-- Semantic analysis over time  
-- Reconstruction of historical states  
-- Clustering, trends, anomaly detection
-
----
-
-## VectorIndex
-
-### Description
-Semantic index for embeddings (e.g., HNSW).
-
-### API
-- **Add** — adds a state node embedding  
-- **Search** — k‑NN search
-
----
-
-## IEmbeddingService
-
-### Description
-Generates embeddings from text or payload.
-
-### API
-- **Encode(string) -> float[]**
-
----
-
-## IRoleService
-
-### Description
-Role and permission validation.
-
-### API
-- **CanWrite(user, stateId) -> bool**  
-- **CanRead(user, stateId) -> bool**
-
-`DefaultRoleService` additionally supports persistent user-specific permissions,
-roles and role assignments in `roles.json`; the external AdminUI manages these
-through `/api/permissions`, `/api/roles` and `/api/users`.
-
----
-
-# Adapter Configuration
-
-Every adapter instance (`hue.0`, `mqtt.0`, legacy `foo.0`, …) has its own settings (like `native` in the original ioBroker),
-stored in `data/adapter-config/<instanceId>.json` and editable in the Admin UI under *Adapter → Konfiguration*
-(permission `SystemConfigure`).
-
-- **Schema:** defaults plus an optional jsonConfig (`AdapterConfigSchema`). Custom adapters override `IAdapter.ConfigSchema`
-  (e.g. `BuildSchema(TextField(...), NumberField(...), PasswordField(...))` in `DeviceAdapterBase`) or ship `io-package.json` /
-  `admin/jsonConfig.json` next to the DLL. Legacy adapters provide the same files in their directory.
-- **Custom adapters:** `Config.Get<T>("hue.bridgeUri")` reads the instance value first and falls back to the global `config.toml`.
-  Values are a snapshot taken at adapter start; saving restarts a running adapter.
-- **Legacy adapters:** the host passes `--configFile <path>`; the AdapterCore exposes it as `this.config`. A restart is required after saving.
-- **API:** `POST /api/adapters/config` with `{adapterId, action: "get" | "save", values}`. Unknown keys and wrong types are rejected,
-  `password` fields are masked and an empty/masked value keeps the stored secret.
-- **jsonConfig support:** panel, tabs, text, number, checkbox, select, password, textarea, header, staticText, divider and `hidden`/`disabled`
-  conditions. Other types (`table`, `sendTo`, `custom`, …) are not rendered yet.
-- **UI:** the "Instanzen" tab lists all instances with settings; the form opens full-page (Save / Save and close / Close).
-- **OAuth (cloud adapters):** declare providers with `AdapterConfigSchema.WithOAuth(new OAuthProviderSpec(...))` (authorize/token URL, keys of
-  clientId/secret/token/refreshToken/expiry fields). The form then shows a login button: the host opens an isolated Chrome/Edge window
-  (temporary profile, private mode, deleted afterwards), receives the code on `http://localhost:<RedirectPort>/callback` (default 53682 –
-  register this redirect URI with the provider; PKCE and `state` are verified) and writes the tokens into the instance config
-  (currently plaintext in `data/adapter-config`; to be replaced by secure storage). Adapters can renew tokens with
-  `Context.AdapterRegistry.OAuth.RefreshAsync(...)` (see the Alexa adapter). The browser opens on the host machine; without Chrome/Edge the UI shows the login link instead (not isolated).
-
----
-
-# Legacy Adapters (Node.js)
-
-Install in the Admin UI under **Adapter → "+ Legacy-Adapter (ZIP)"**. The ZIP must contain a *built* adapter (`io-package.json`, entry file such as `main.js`, and `node_modules`; the package may sit in one subfolder). It is unpacked to `Adapters\IOBroker\<name>`, and every `@iobroker/adapter-core` is replaced by the bundled bridge-compatible drop-in. Afterwards use **"+ Instanz hinzufügen"** to create `name.0`, `name.1`, … (persisted in `adapter.legacyInstances`); start/stop/restart and configuration are available in the "Instanzen" tab. All persisted instances start with the system. `adapter.legacyAutoStart = true` additionally adopts already present packages as `name.0`. Requires Node.js on the host.
-
----
-
-# Snapshot Format
-
-### Description
-JSONL file containing history samples.
-
-### Example
-```json { "Id": "temp.livingroom", "Timestamp": "2026-09-29T12:57:00Z", "Value": 22.5, "Embedding": [0.12, 0.88, ...] } ```
-
-## License
-
-MIT, see [LICENSE](./LICENSE).
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR  
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,  
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE  
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER  
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,  
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN  
+THE SOFTWARE.

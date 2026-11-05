@@ -2,6 +2,7 @@ using ioBroker_NewGen.Core.Bus;
 using ioBroker_NewGen.Core.Matrix;
 using ioBroker_NewGen.Core.Registry;
 using ioBroker_NewGen.Core.Routing;
+using ioBroker_NewGen.Core.Web;
 using ioBroker_NewGen.Core.Deployment;
 using RSEV.Utilities.Configuration;
 using RSEV.Utilities.ApiBuilder;
@@ -27,6 +28,12 @@ namespace ioBroker_NewGen.Core.Adapters
         AdapterRouter Router { get; }
 
         AdapterRegistry AdapterRegistry { get; }
+
+        /// <summary>
+        /// Registriert HTTP-/WebSocket-Endpunkte beim separaten Web-Adapter.
+        /// Direkter Zugriff auf RuntimeApiHost ist für Adapter verboten.
+        /// </summary>
+        IWebEndpointRegistry WebEndpoints { get; }
 
         AdapterInstaller? AdapterInstaller { get; }
 

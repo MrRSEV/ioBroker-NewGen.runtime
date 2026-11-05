@@ -14,8 +14,14 @@ namespace ioBroker_NewGen.Runtime
     internal static class UnexpectedUserExitHandler
     {
         private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(10);
-        private static bool _isRunning = true;
-        private static bool _stopInitiated = false;
+        private static int _stopInitiated;
+        private static volatile bool _stopSucceeded;
+        private static readonly TaskCompletionSource _shutdownCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>True, wenn der laufende Shutdown ein Neustart des Cores sein soll.</summary>
+        public static bool RestartRequested { get; private set; }
+
+        private static bool TryBeginStop() => Interlocked.Exchange(ref _stopInitiated, 1) == 0;
 
         // Native Windows Handler
         private delegate bool ConsoleCtrlDelegate(CtrlTypes ctrlType);
@@ -54,37 +60,104 @@ namespace ioBroker_NewGen.Runtime
                     return true;
                 }, true);
             }
+
+            // Unter Linux/macOS beendet z. B. 'systemctl stop' den Prozess per SIGTERM; auch dann muss OnStop laufen.
+            _signalRegistrations.Add(PosixSignalRegistration.Create(PosixSignal.SIGTERM, signal =>
+            {
+                signal.Cancel = true;
+                context.Logger.LogWarning("[ExitHandler] SIGTERM erkannt – Shutdown wird eingeleitet...");
+                ExecuteOnStopSync(context);
+            }));
+        }
+
+        private static readonly List<PosixSignalRegistration> _signalRegistrations = new();
+
+        /// <summary>
+        /// Fordert den geordneten Shutdown über <see cref="OnStop.OnStopAsync"/> an (nie per Prozess-Kill).
+        /// Kehrt sofort zurück, der Shutdown läuft im Hintergrund, damit z. B. ein Pipe-Command noch antworten kann.
+        /// </summary>
+        /// <returns><c>false</c>, wenn bereits ein Shutdown läuft.</returns>
+        public static bool RequestShutdown(IRuntimeContext context, bool restart, TimeSpan? delay = null)
+        {
+            if (!TryBeginStop())
+            {
+                return false;
+            }
+
+            RestartRequested = restart;
+            _ = Task.Run(async () =>
+            {
+                if (delay is { } wait)
+                {
+                    await Task.Delay(wait);
+                }
+
+                await RunOnStopAsync(context);
+            });
+            return true;
         }
 
         /// <summary>
-        /// Einfache Eingabeschleife, solange das System läuft.
-        /// Kann später um echte Befehle erweitert werden.
+        /// Liest Konsolenbefehle und wartet, bis der Shutdown abgeschlossen ist. Liefert den Prozess-Exitcode;
+        /// bei einem Neustart wird dieser nach vollständigem OnStop über <see cref="CoreRestarter"/> eingeleitet.
         /// </summary>
-        public static async Task RunCommandLoopAsync()
+        public static async Task<int> RunCommandLoopAsync()
         {
             var rtx = MainRuntimeContext.Instance;
+            _ = Task.Run(() => ReadConsoleAsync(rtx));
 
-            while (_isRunning && rtx.IsRunning)
+            await _shutdownCompleted.Task;
+
+            if (!RestartRequested)
+            {
+                return 0;
+            }
+
+            if (!_stopSucceeded)
+            {
+                rtx.Logger.LogError("[ExitHandler] Neustart abgebrochen: OnStop wurde nicht sauber abgeschlossen.");
+                return 1;
+            }
+
+            return CoreRestarter.Restart(rtx);
+        }
+
+        private static async Task ReadConsoleAsync(MainRuntimeContext rtx)
+        {
+            while (!_shutdownCompleted.Task.IsCompleted)
             {
                 var input = await Task.Run(Console.ReadLine);
+                if (input is null)
+                {
+                    // Keine Konsole (z. B. Dienstbetrieb): Steuerung läuft über Signale und die Command-Pipe.
+                    return;
+                }
+
                 if (string.IsNullOrWhiteSpace(input)) continue;
 
                 if (string.Equals(input.Trim(), "exit", StringComparison.OrdinalIgnoreCase))
                 {
                     rtx.Logger.LogInfo("Befehl 'exit' empfangen – Shutdown wird eingeleitet...");
-                    await ExecuteOnStopAsync(rtx);
+                    RequestShutdown(rtx, restart: false);
                 }
                 else
                 {
-                    rtx.Logger.LogWarning($"Unbekannter Befehl: '{input}'");
+                    var result = await rtx.Commands.ExecuteLineAsync(input);
+                    if (result.Success)
+                    {
+                        rtx.Logger.LogInfo(result.Message);
+                    }
+                    else
+                    {
+                        rtx.Logger.LogWarning(result.Message);
+                    }
                 }
             }
         }
 
         private static void ExecuteOnStopSync(IRuntimeContext context)
         {
-            if (_stopInitiated) return;
-            _stopInitiated = true;
+            if (!TryBeginStop()) return;
 
             try
             {
@@ -95,6 +168,7 @@ namespace ioBroker_NewGen.Runtime
                 }
                 else
                 {
+                    _stopSucceeded = true;
                     context.Logger.LogInfo("OnStop erfolgreich abgeschlossen (synchron).");
                 }
             }
@@ -106,15 +180,12 @@ namespace ioBroker_NewGen.Runtime
             }
             finally
             {
-                _isRunning = false;
+                _shutdownCompleted.TrySetResult();
             }
         }
 
-        private static async Task ExecuteOnStopAsync(IRuntimeContext context)
+        private static async Task RunOnStopAsync(IRuntimeContext context)
         {
-            if (_stopInitiated) return;
-            _stopInitiated = true;
-
             try
             {
                 using var cts = new CancellationTokenSource(ShutdownTimeout);
@@ -122,6 +193,8 @@ namespace ioBroker_NewGen.Runtime
 
                 if (await Task.WhenAny(shutdownTask, Task.Delay(Timeout.Infinite, cts.Token)) == shutdownTask)
                 {
+                    await shutdownTask;
+                    _stopSucceeded = true;
                     context.Logger.LogInfo("OnStop erfolgreich abgeschlossen (async).");
                 }
                 else
@@ -137,7 +210,7 @@ namespace ioBroker_NewGen.Runtime
             }
             finally
             {
-                _isRunning = false;
+                _shutdownCompleted.TrySetResult();
             }
         }
     }

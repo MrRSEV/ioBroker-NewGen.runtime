@@ -8,15 +8,15 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\ioBroker-NewGen.csproj" />
-    <ProjectReference Include="..\..\Adapters\Zigbee\ZigbeeAdapter.csproj" />
-    <ProjectReference Include="..\..\Adapters\Hue\HueAdapter.csproj" />
-    <ProjectReference Include="..\..\Adapters\Shelly\ShellyAdapter.csproj" />
-    <ProjectReference Include="..\..\Adapters\FritzBox\FritzBoxAdapter.csproj" />
-    <ProjectReference Include="..\..\Adapters\Bosch\BoschAdapter.csproj" />
-    <ProjectReference Include="..\..\Adapters\Knx\KnxAdapter.csproj" />
-    <ProjectReference Include="..\..\Adapters\Modbus\ModbusAdapter.csproj" />
-    <ProjectReference Include="..\..\Adapters\Homematic\HomematicAdapter.csproj" />
-    <ProjectReference Include="..\..\Adapters\Alexa\AlexaAdapter.csproj" />
+    <ProjectReference Include="..\..\..\Adapters\ioBroker-NewGen.zigbee\ZigbeeAdapter.csproj" />
+    <ProjectReference Include="..\..\..\Adapters\ioBroker-NewGen.hue\HueAdapter.csproj" />
+    <ProjectReference Include="..\..\..\Adapters\ioBroker-NewGen.shelly\ShellyAdapter.csproj" />
+    <ProjectReference Include="..\..\..\Adapters\ioBroker-NewGen.FritzBox\FritzBoxAdapter.csproj" />
+    <ProjectReference Include="..\..\..\Adapters\ioBroker-NewGen.bosch\BoschAdapter.csproj" />
+    <ProjectReference Include="..\..\..\Adapters\ioBroker-NewGen.knx\KnxAdapter.csproj" />
+    <ProjectReference Include="..\..\..\Adapters\ioBroker-NewGen.modbus\ModbusAdapter.csproj" />
+    <ProjectReference Include="..\..\..\Adapters\ioBroker-NewGen.homematic\HomematicAdapter.csproj" />
+    <ProjectReference Include="..\..\..\Adapters\ioBroker-NewGen.alexa\AlexaAdapter.csproj" />
     <Reference Include="RSEV.Utilities">
       <HintPath>..\..\libs\RSEV.Utilities.dll</HintPath>
       <Private>true</Private>

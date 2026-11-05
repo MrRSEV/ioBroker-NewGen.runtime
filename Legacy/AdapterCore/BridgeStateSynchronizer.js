@@ -260,6 +260,10 @@ class BridgeStateSynchronizer extends EventEmitter {
 
     const frame = String(metadata.frame || '').toLowerCase();
     if (frame === 'message' || frame === 'hostmessage') this._onMessage(envelope, metadata, payload);
+    else if (frame === 'webendpointrequest') this.emit('webEndpointRequest', envelope, payload);
+    else if (frame === 'websocketopen') this.emit('webSocketOpen', envelope, payload);
+    else if (frame === 'websocketmessage') this.emit('webSocketMessage', envelope, payload);
+    else if (frame === 'websocketclose') this.emit('webSocketClose', envelope, payload);
     else if (frame === 'objectchange') this._onObject(envelope.address, payload);
     else if (frame === 'statechange' || frame === 'stateupdate' || (!frame && envelope.frameKind === FrameKind.StateUpdate)) {
       this._onState(envelope.address, payload);

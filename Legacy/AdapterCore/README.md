@@ -39,6 +39,7 @@ Von `NodeAdapterRuntime` übergebene Argumente `--host --port --name [--instance
 |---|---|
 | `Adapter.js` | Adapter (EventEmitter): Properties, Events, Lifecycle, Unload |
 | `StateApi.js` / `ObjectApi.js` / `MessageApi.js` | `*Async`-Methoden (Promises) + Callback-Varianten |
+| `CompatibilityApi.js` | Notifications, Metadaten, File Storage, Web-Endpoint- und Process-Lifecycle-Methoden |
 | `LoggerApi.js` | `log.silly/debug/info/warn/error` → Bridge, Fallback Konsole |
 | `SubscriptionManager.js` | Wildcard-Subscriptions (`*`) für States/Objekte |
 | `BridgeStateSynchronizer.js` | Client, Auto-Reconnect (Backoff 500 ms … 10 s), zentrale Frame-Verarbeitung, Caches, Dedupe |
@@ -46,7 +47,26 @@ Von `NodeAdapterRuntime` übergebene Argumente `--host --port --name [--instance
 
 Unterstützt: set/get/getStates/subscribe/unsubscribe (State, `Foreign`-Varianten, `setStateChanged`), set/get/extend/del-Object
 (`Foreign`, `setObjectNotExists`, `subscribeObjects`), `sendTo`, `sendToHost` (+ `sendToAsync`), Events `ready`, `stateChange`,
-`objectChange`, `message`, `unload` (mit Callback, 5 s Timeout).
+`objectChange`, `message`, `unload` (mit Callback, 5 s Timeout). Die Host-Runtime stellt zusätzlich Kompatibilitätsdienste
+für Metadaten, Notifications, den isolierten File Storage, zentrale Web-Endpunkte und den Prozess-Lifecycle bereit.
+
+Die zusätzlichen Adaptermethoden heißen `notifyAsync`, `getMetadataAsync`, `setMetadataAsync`,
+`readFileAsync`, `writeFileAsync`, `deleteFileAsync`, `listFilesAsync`,
+`registerWebEndpointAsync(route, handler, options)`, `getProcessStatusAsync`, `restartSelfAsync` und `stopSelfAsync`.
+`publishInstanceMessageAsync(messageType, socketId, data, { adminInstance })` sendet den ioBroker-
+Socket.IO-Befehl `im` an `admin.0` (oder die angegebene Admin-Instanz); der Admin-Adapter verteilt
+`{m, s, d}` anschließend an seine verbundenen Socket.IO-Clients.
+Für WebSockets wird `options.kind = "websocket"` verwendet; der Handler erhält
+`open`, `message` und `close`-Ereignisse sowie eine Session mit `sendText`,
+`sendBinary` und `close`.
+
+Der klassische `ioBroker.web`-Adapter stellt keinen allgemeinen Endpoint-Registrierungsaufruf
+bereit. Sein Legacy-Vertrag lädt `common.webExtension`-Module, die Zugriff auf Express und
+Socket.IO erhalten. `registerWebEndpointAsync` registriert dagegen über die NewGen-Bridge eine
+HTTP- oder WebSocket-Route bei `IWebEndpointRegistry`. Eine vorhandene klassische `web`-Instanz
+kann deshalb nicht automatisch als dynamischer Endpoint-Provider ausgewählt werden; sie bleibt
+für ihre vorhandenen Web-Extensions und Socket.IO-Nachrichten zuständig. Neue oder migrierte
+Routen nutzen die NewGen-Endpoint-API und den separaten NewGen-Web-Adapter.
 
 ## Frame-Mapping
 
@@ -63,6 +83,11 @@ Frames nutzen `frameKind` aus `BusFrameKind` (1 = StateUpdate, 2 = Command, 3 = 
 | extendObject | `ObjectExtend` | 2 |
 | delObject | `ObjectDelete` | 2 |
 | sendTo / sendToHost | `Message` / `HostMessage` (`command`, `from`) | 2 |
+| get/setMetadata | `MetadataQuery` / `Metadata` (`operation`) | 2 |
+| File Storage | `FileStorage` (`operation=read\|write\|delete\|list`) | 2 |
+| Web Endpoint | `WebEndpoint` (`operation=register`) | 2 |
+| Process Lifecycle | `ProcessLifecycle` (`operation=status\|restart\|stop`) | 2 |
+| Notification | `Notification` (`level`, `message`) | 3 |
 | log | `Log` | 3 |
 
 Anfragen tragen `metadata.correlationId` und `expectReply=true`. Antworten der Bridge/Matrix sind Frames mit
@@ -70,9 +95,9 @@ Anfragen tragen `metadata.correlationId` und `expectReply=true`. Antworten der B
 Eingehend verarbeitet: `frame` = `StateChange`/`StateUpdate` (bzw. `frameKind` 1 ohne `frame`), `ObjectChange`, `Message`/`HostMessage`.
 State-, Objekt- und Message-Events werden dedupliziert (State: val/ack/ts/lc/q; Message: `messageId`/`correlationId`).
 Während einer Trennung werden Schreib-Frames gepuffert (max. 1000) und nach dem Reconnect gesendet; Subscriptions werden erneut registriert.
-
-> Hinweis: Der aktuelle `TcpBridgeServer` veröffentlicht eingehende Frames nur auf den Systembus und beantwortet keine Queries.
-> Antwort-/Push-Frames im oben beschriebenen Format müssen vom Host (z. B. Matrix-Anbindung) gesendet werden; bis dahin greift der lokale Cache.
+Der `TcpBridgeServer` beantwortet die oben genannten Query-/Command-Frames und sendet State-/Objekt-Änderungen an passende
+Subscriptions. Der File Storage ist pro Adapter isoliert; Web-/WebSocket-Endpunkte werden an die zentrale `IWebEndpointRegistry`
+und den separat installierbaren Web-Adapter delegiert.
 
 ## Tests
 

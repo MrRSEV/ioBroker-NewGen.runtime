@@ -5,7 +5,10 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ioBroker_NewGen.Core.Adapters.Configuration;
+using ioBroker_NewGen.Core.Bus;
+using ioBroker_NewGen.Core.Matrix;
 using ioBroker_NewGen.Core.Registry;
+using ioBroker_NewGen.Core.Web;
 using RSEV.Utilities.Logging;
 using RSEV.Utilities.Processes;
 
@@ -36,14 +39,26 @@ namespace ioBroker_NewGen.Core.Bridge
             AdapterRegistry adapterRegistry,
             ILogger logger,
             TimeSpan? crashRestartDelay = null,
-            TimeSpan? healthCheckInterval = null)
+            TimeSpan? healthCheckInterval = null,
+            SemanticStateMatrix? matrix = null,
+            SystemMessageBus? systemBus = null,
+            IWebHostService? webHostService = null,
+            string? storageRoot = null,
+            IWebEndpointRegistry? webEndpointRegistry = null)
         {
             _processController = processController ?? throw new ArgumentNullException(nameof(processController));
             _adapterRegistry = adapterRegistry ?? throw new ArgumentNullException(nameof(adapterRegistry));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _crashRestartDelay = crashRestartDelay ?? TimeSpan.FromMilliseconds(2000);
             _healthCheckInterval = healthCheckInterval ?? TimeSpan.FromMilliseconds(5000);
+            Api = new NodeAdapterRuntimeApi(matrix, systemBus, adapterRegistry, logger, webHostService, storageRoot, webEndpointRegistry);
+            Api.AttachRuntime(this);
         }
+
+        /// <summary>
+        /// Kompatibilitäts-API für fortgeschrittene Legacy-Adapter.
+        /// </summary>
+        public NodeAdapterRuntimeApi Api { get; }
 
         /// <summary>
         /// Startet einen isolierten Node.js-Adapterprozess, registriert ihn in der
@@ -136,6 +151,29 @@ namespace ioBroker_NewGen.Core.Bridge
         }
 
         public bool IsRunning(string adapterId) => _processIdByAdapterId.ContainsKey(adapterId);
+
+        /// <summary>
+        /// Startet einen registrierten Prozess erneut. Der Startvertrag bleibt
+        /// derselbe wie beim initialen Prozessstart; die gespeicherte ProcessSpec
+        /// wird für den Neustart wiederverwendet.
+        /// </summary>
+        public async Task<bool> RestartAdapterAsync(string adapterId, CancellationToken cancellationToken = default)
+        {
+            if (!_processIdByAdapterId.TryGetValue(adapterId, out var processId))
+            {
+                return false;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            var restarted = await RestartProcessAsync(adapterId, processId, cancellationToken);
+            _adapterRegistry.UpdateStatus(adapterId, restarted ? AdapterStatus.Connected : AdapterStatus.Faulted);
+            if (restarted)
+            {
+                _adapterRegistry.RecordRestart(adapterId);
+            }
+
+            return restarted;
+        }
 
         /// <summary>
         /// Stoppt den Node.js-Prozess eines Adapters und aktualisiert dessen Status.
@@ -272,6 +310,7 @@ namespace ioBroker_NewGen.Core.Bridge
         public async ValueTask DisposeAsync()
         {
             await StopAllAsync();
+            Api.Dispose();
             _healthCheckGate.Dispose();
         }
 

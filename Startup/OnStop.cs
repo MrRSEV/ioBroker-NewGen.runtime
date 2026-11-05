@@ -21,6 +21,8 @@ namespace ioBroker_NewGen.Startup
 
                 if (mainContext.Matrix is not null)
                 {
+                    var processedEmbeddings = mainContext.FlushSemanticEmbeddings();
+                    context.Logger.LogInfo($"Semantische Embeddings vor dem Stop verarbeitet: {processedEmbeddings}.");
                     mainContext.Matrix.StopCronSnapshot();
                     await mainContext.Matrix.WriteSnapshotAsync();
                     context.Logger.LogInfo("Snapshot der SemanticStateMatrix geschrieben.");
@@ -51,6 +53,8 @@ namespace ioBroker_NewGen.Startup
 
                 if (mainContext.Matrix is not null)
                 {
+                    var processedEmbeddings = mainContext.FlushSemanticEmbeddings();
+                    context.Logger.LogInfo($"Semantische Embeddings vor dem Stop verarbeitet: {processedEmbeddings}.");
                     mainContext.Matrix.StopCronSnapshot();
                     mainContext.Matrix.WriteSnapshotAsync().GetAwaiter().GetResult();
                     context.Logger.LogInfo("Snapshot der SemanticStateMatrix geschrieben.");

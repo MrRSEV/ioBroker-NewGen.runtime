@@ -9,6 +9,7 @@ const { StateApi } = require('./StateApi');
 const { ObjectApi } = require('./ObjectApi');
 const { MessageApi } = require('./MessageApi');
 const { LoggerApi } = require('./LoggerApi');
+const { CompatibilityApi } = require('./CompatibilityApi');
 
 const UNLOAD_TIMEOUT_MS = 5000;
 
@@ -88,11 +89,14 @@ class Adapter extends EventEmitter {
       sync: this._synchronizer,
       subs: subscriptions,
       log: this.log,
-      now: options.now || Date.now
+      now: options.now || Date.now,
+      webEndpoints: new Map(),
+      webSockets: new Map()
     };
     this._stateApi = new StateApi(core);
     this._objectApi = new ObjectApi(core);
     this._messageApi = new MessageApi(core);
+    this._compatibilityApi = new CompatibilityApi(core);
 
     for (const event of ['ready', 'stateChange', 'objectChange', 'message', 'unload']) {
       if (typeof options[event] === 'function') this.on(event, options[event]);
@@ -121,9 +125,108 @@ class Adapter extends EventEmitter {
       if (subscriptions.matches('object', id)) this.emit('objectChange', id, obj);
     });
     sync.on('message', message => this.emit('message', message));
+    sync.on('webEndpointRequest', (envelope, payload) => this._handleWebEndpointRequest(envelope, payload));
+    sync.on('webSocketOpen', (envelope, payload) => this._handleWebSocketOpen(envelope, payload));
+    sync.on('webSocketMessage', (envelope, payload) => this._handleWebSocketMessage(envelope, payload));
+    sync.on('webSocketClose', (envelope, payload) => this._handleWebSocketClose(envelope, payload));
     sync.on('transportError', error => {
       if (!this.connected) this.log.debug(`Bridge: ${error.message}`);
     });
+  }
+
+  async _handleWebEndpointRequest(envelope, payload) {
+    const route = payload && payload.route ? payload.route : envelope.address;
+    const registration = this._compatibilityApi.core.webEndpoints.get(route);
+    const handler = registration && registration.kind === 'http' ? registration.handler : null;
+    let response = { statusCode: handler ? 200 : 404, headers: {}, body: Buffer.alloc(0) };
+    if (handler) {
+      try {
+        const result = await handler({
+          route,
+          headers: (payload && payload.headers) || {},
+          body: payload && payload.bodyBase64 ? Buffer.from(payload.bodyBase64, 'base64') : Buffer.alloc(0)
+        });
+        if (result && typeof result === 'object' && ('statusCode' in result || 'body' in result || 'headers' in result)) {
+          response = {
+            statusCode: Number(result.statusCode || 200),
+            headers: result.headers || {},
+            body: Buffer.isBuffer(result.body) ? result.body : Buffer.from(String(result.body ?? ''), 'utf8')
+          };
+        } else {
+          response.body = Buffer.isBuffer(result) ? result : Buffer.from(String(result ?? ''), 'utf8');
+        }
+      } catch (error) {
+        response = { statusCode: 500, headers: {}, body: Buffer.from(error.message || 'web endpoint failed', 'utf8') };
+      }
+    }
+
+    await this._synchronizer.send({
+      frame: 'WebEndpointResponse',
+      kind: 2,
+      address: route,
+      payload: {
+        statusCode: response.statusCode,
+        headers: response.headers,
+        bodyBase64: response.body.toString('base64')
+      },
+      metadata: { reply: 'true', correlationId: envelope.metadata && envelope.metadata.correlationId }
+    });
+  }
+
+  async _handleWebSocketOpen(envelope, payload) {
+    const correlationId = envelope.metadata && envelope.metadata.correlationId;
+    const route = payload && payload.route ? payload.route : envelope.address;
+    const registration = this._compatibilityApi.core.webEndpoints.get(route);
+    const handler = registration && registration.kind === 'websocket' ? registration.handler : null;
+    const session = this._compatibilityApi.createWebSocketSession(correlationId, route);
+    this._compatibilityApi.core.webSockets.set(correlationId, { handler, session });
+    let accepted = Boolean(handler);
+    if (handler) {
+      try {
+        if (typeof handler === 'function') await handler({ type: 'open', route, headers: (payload && payload.headers) || {}, session });
+      } catch (error) {
+        accepted = false;
+        this.log.error(`WebSocket endpoint failed: ${error.message}`);
+      }
+    }
+    await this._synchronizer.send({
+      frame: 'WebSocketOpenResponse',
+      kind: 2,
+      address: route,
+      payload: { statusCode: accepted ? 101 : 404 },
+      metadata: { reply: 'true', correlationId }
+    });
+    if (!accepted) this._compatibilityApi.core.webSockets.delete(correlationId);
+  }
+
+  async _handleWebSocketMessage(envelope, payload) {
+    const correlationId = envelope.metadata && envelope.metadata.correlationId;
+    const registration = this._compatibilityApi.core.webSockets.get(correlationId);
+    if (!registration || !registration.handler) return;
+    const data = payload && payload.dataBase64 ? Buffer.from(payload.dataBase64, 'base64') : Buffer.alloc(0);
+    try {
+      await registration.handler({
+        type: 'message',
+        data,
+        isText: Boolean(payload && payload.isText),
+        session: registration.session
+      });
+    } catch (error) {
+      this.log.error(`WebSocket message handler failed: ${error.message}`);
+    }
+  }
+
+  async _handleWebSocketClose(envelope) {
+    const correlationId = envelope.metadata && envelope.metadata.correlationId;
+    const registration = this._compatibilityApi.core.webSockets.get(correlationId);
+    if (registration && registration.handler) {
+      try {
+        await registration.handler({ type: 'close', session: registration.session });
+      } catch (error) {
+        this.log.error(`WebSocket close handler failed: ${error.message}`);
+      }
+    }
+    this._compatibilityApi.core.webSockets.delete(correlationId);
   }
 
   async _start() {
@@ -191,5 +294,6 @@ function installApi(target, property, apiClass) {
 installApi(Adapter, '_stateApi', StateApi);
 installApi(Adapter, '_objectApi', ObjectApi);
 installApi(Adapter, '_messageApi', MessageApi);
+installApi(Adapter, '_compatibilityApi', CompatibilityApi);
 
 module.exports = { Adapter };

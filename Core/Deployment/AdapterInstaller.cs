@@ -20,20 +20,20 @@ namespace ioBroker_NewGen.Core.Deployment
             }
 
             RootPath = Path.GetFullPath(rootPath);
-            IoBrokerPath = Path.Combine(RootPath, "IOBroker");
-            CustomPath = Path.Combine(RootPath, "custom");
+            LegacyPath = Path.Combine(RootPath, "legacy");
+            CustomPath = Path.Combine(RootPath, "native");
         }
 
         public string RootPath { get; }
 
-        public string IoBrokerPath { get; }
+        public string LegacyPath { get; }
 
         public string CustomPath { get; }
 
         public void EnsureLayout()
         {
             Directory.CreateDirectory(RootPath);
-            Directory.CreateDirectory(IoBrokerPath);
+            Directory.CreateDirectory(LegacyPath);
             Directory.CreateDirectory(CustomPath);
         }
 
@@ -53,7 +53,7 @@ namespace ioBroker_NewGen.Core.Deployment
             var safeName = ValidateAdapterName(adapterName);
             EnsureLayout();
 
-            var destination = Path.Combine(IoBrokerPath, safeName);
+            var destination = Path.Combine(LegacyPath, safeName);
             CopyDirectory(source, destination);
             return destination;
         }
@@ -72,12 +72,12 @@ namespace ioBroker_NewGen.Core.Deployment
 
         public IReadOnlyCollection<string> GetInstalledLegacyAdapters()
         {
-            if (!Directory.Exists(IoBrokerPath))
+            if (!Directory.Exists(LegacyPath))
             {
                 return Array.Empty<string>();
             }
 
-            return Directory.GetDirectories(IoBrokerPath, "*", SearchOption.TopDirectoryOnly)
+            return Directory.GetDirectories(LegacyPath, "*", SearchOption.TopDirectoryOnly)
                 .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
         }
@@ -93,7 +93,7 @@ namespace ioBroker_NewGen.Core.Deployment
 
             if (removeLegacyDirectory)
             {
-                var legacyDirectory = Path.Combine(IoBrokerPath, safeName);
+                var legacyDirectory = Path.Combine(LegacyPath, safeName);
                 if (Directory.Exists(legacyDirectory))
                 {
                     Directory.Delete(legacyDirectory, recursive: true);

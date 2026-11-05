@@ -20,8 +20,10 @@ namespace ioBroker_NewGen.Startup
                 mainContext.InitializeMatrixAndBus(snapshotPath);
                 mainContext.InitializeLocalization();
                 await mainContext.Matrix.LoadSnapshotAsync();
+                mainContext.StartSemanticEmbeddingWorker();
                 mainContext.Matrix.StartCronSnapshot(TimeSpan.FromMinutes(5));
-                rtx.Logger.LogInfo("SemanticStateMatrix, SystemBus und AdapterRouter initialisiert.");
+                rtx.Logger.LogInfo("SemanticStateMatrix, SemanticEmbeddingWorker, SystemBus und AdapterRouter initialisiert.");
+                mainContext.StartCommandPipe();
 
                 var port = rtx.Config.Get<int>("ipc.ipcPort");
                 if (port <= 0)
@@ -76,7 +78,7 @@ namespace ioBroker_NewGen.Startup
                 var adapterDirectory = rtx.Config.Get<string>("adapter.customAdapterDirectory");
                 if (string.IsNullOrWhiteSpace(adapterDirectory))
                 {
-                    adapterDirectory = Path.Combine(AppContext.BaseDirectory, "Adapters", "custom");
+                    adapterDirectory = Path.Combine(AppContext.BaseDirectory, "Adapters", "native");
                 }
                 else if (!Path.IsPathRooted(adapterDirectory))
                 {
@@ -107,8 +109,9 @@ namespace ioBroker_NewGen.Startup
                 mainContext.InitializeMatrixAndBus(snapshotPath);
                 mainContext.InitializeLocalization();
                 mainContext.Matrix.LoadSnapshotAsync().GetAwaiter().GetResult();
+                mainContext.StartSemanticEmbeddingWorker();
                 mainContext.Matrix.StartCronSnapshot(TimeSpan.FromMinutes(5));
-                rtx.Logger.LogInfo("SemanticStateMatrix, SystemBus und AdapterRouter initialisiert.");
+                rtx.Logger.LogInfo("SemanticStateMatrix, SemanticEmbeddingWorker, SystemBus und AdapterRouter initialisiert.");
 
                 var port = rtx.Config.Get<int>("ipc.ipcPort");
                 if (port <= 0)
@@ -160,7 +163,7 @@ namespace ioBroker_NewGen.Startup
                 var adapterDirectory = rtx.Config.Get<string>("adapter.customAdapterDirectory");
                 if (string.IsNullOrWhiteSpace(adapterDirectory))
                 {
-                    adapterDirectory = Path.Combine(AppContext.BaseDirectory, "Adapters", "custom");
+                    adapterDirectory = Path.Combine(AppContext.BaseDirectory, "Adapters", "native");
                 }
                 else if (!Path.IsPathRooted(adapterDirectory))
                 {

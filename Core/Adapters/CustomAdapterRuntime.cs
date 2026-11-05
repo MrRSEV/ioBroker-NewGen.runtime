@@ -11,6 +11,7 @@ using ioBroker_NewGen.Core.Matrix;
 using ioBroker_NewGen.Core.Registry;
 using ioBroker_NewGen.Core.Routing;
 using ioBroker_NewGen.Core.Deployment;
+using ioBroker_NewGen.Core.Web;
 using RSEV.Utilities.Loading;
 using RSEV.Utilities.Configuration;
 using RSEV.Utilities.Runtime;
@@ -29,6 +30,7 @@ namespace ioBroker_NewGen.Core.Adapters
         private readonly IAdapterContext _adapterContext;
         private readonly ILogger _logger;
         private readonly ConcurrentDictionary<string, IAdapter> _adapters = new();
+        private readonly ConcurrentDictionary<string, byte> _forbiddenWebHostTermination = new(StringComparer.OrdinalIgnoreCase);
         private readonly object _subscriptionLock = new();
         private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
         private readonly Action<BusFrame> _dispatchHandler;
@@ -46,7 +48,8 @@ namespace ioBroker_NewGen.Core.Adapters
             AdapterInstaller? adapterInstaller = null,
             AdapterPackageInstaller? adapterPackageInstaller = null,
             AdapterRepositoryClient? adapterRepositoryClient = null,
-            ioBroker_NewGen.Core.Bridge.LegacyAdapterManager? legacy = null)
+            ioBroker_NewGen.Core.Bridge.LegacyAdapterManager? legacy = null,
+            IWebEndpointRegistry? webEndpoints = null)
         {
             _assemblyLoader = assemblyLoader ?? throw new ArgumentNullException(nameof(assemblyLoader));
             _adapterRegistry = adapterRegistry ?? throw new ArgumentNullException(nameof(adapterRegistry));
@@ -61,7 +64,8 @@ namespace ioBroker_NewGen.Core.Adapters
                 adapterInstaller,
                 adapterPackageInstaller,
                 adapterRepositoryClient,
-                legacy);
+                legacy,
+                webEndpoints);
             _dispatchHandler = DispatchCommandFrame;
             systemBus.Subscribe("*", _dispatchHandler);
             _subscribed = true;
@@ -249,7 +253,9 @@ namespace ioBroker_NewGen.Core.Adapters
             try
             {
                 RegisterAdapterTranslations(adapter);
-                await adapter.InitializeAsync(_adapterContext, cancellationToken);
+                await adapter.InitializeAsync(_adapterContext is CustomAdapterContext customContext
+                    ? customContext.CreateScoped(adapterId)
+                    : _adapterContext, cancellationToken);
                 await adapter.StartAsync(cancellationToken);
                 _adapterRegistry.UpdateStatus(adapterId, AdapterStatus.Connected);
                 return true;
@@ -265,6 +271,43 @@ namespace ioBroker_NewGen.Core.Adapters
             finally
             {
                 visiting.Remove(adapterId);
+            }
+        }
+
+        /// <summary>
+        /// Wird von einem adapterbezogenen Context aufgerufen, wenn ein Adapter
+        /// den verbotenen RuntimeApiHost/WebHostService-Pfad verwendet. Die
+        /// Beendigung läuft unabhängig und kann weder den Core noch andere
+        /// Adapter beeinflussen.
+        /// </summary>
+        internal void ReportForbiddenWebHostAccess(string adapterId, Exception? exception = null)
+        {
+            var suffix = exception is null ? string.Empty : $" Ursache: {exception.Message}";
+            _logger.LogError($"[RuntimeApiHost] Adapterinstanz '{adapterId}' verwendet WebHostService.cs direkt. " +
+                             "Der Zugriff ist verboten; die Instanz wird isoliert beendet." + suffix);
+
+            if (!_forbiddenWebHostTermination.TryAdd(adapterId, 0))
+            {
+                return;
+            }
+
+            _ = TerminateForbiddenAdapterAsync(adapterId);
+        }
+
+        private async Task TerminateForbiddenAdapterAsync(string adapterId)
+        {
+            try
+            {
+                await StopAdapterAsync(adapterId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"[RuntimeApiHost] Verbotener Adapter '{adapterId}' konnte nicht sauber beendet werden: {ex}");
+            }
+            finally
+            {
+                _adapterRegistry.UpdateStatus(adapterId, AdapterStatus.Faulted);
+                _forbiddenWebHostTermination.TryRemove(adapterId, out _);
             }
         }
 
@@ -462,6 +505,36 @@ namespace ioBroker_NewGen.Core.Adapters
             try
             {
                 return await StopAdapterCoreAsync(adapterId, cancellationToken);
+            }
+            finally
+            {
+                _lifecycleGate.Release();
+            }
+        }
+
+        /// <summary>
+        /// Stoppt einen Adapter und nimmt ihn aus Runtime und Registry, behält aber Konfiguration und
+        /// persistierte Instanzliste (anders als <see cref="RemoveInstanceAsync"/>); auch für die Instanz .0.
+        /// </summary>
+        public async Task<bool> UnloadAdapterAsync(string adapterId, CancellationToken cancellationToken = default)
+        {
+            await _lifecycleGate.WaitAsync(cancellationToken);
+            try
+            {
+                var resolvedId = ResolveAdapterId(adapterId);
+                if (resolvedId is null)
+                {
+                    return false;
+                }
+
+                if (_adapterRegistry.Get(resolvedId)?.Status is AdapterStatus.Connected or AdapterStatus.Connecting)
+                {
+                    await StopAdapterCoreAsync(resolvedId, cancellationToken);
+                }
+
+                _adapters.TryRemove(resolvedId, out _);
+                _adapterRegistry.Unregister(resolvedId);
+                return true;
             }
             finally
             {

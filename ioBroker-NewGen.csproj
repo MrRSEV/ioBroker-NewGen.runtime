@@ -6,10 +6,10 @@
     <RootNamespace>ioBroker_NewGen</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>0.3.0-beta0</Version>
-    <AssemblyVersion>0.3.0.0</AssemblyVersion>
-    <FileVersion>0.3.0.0</FileVersion>
-    <InformationalVersion>beta0.3.0</InformationalVersion>
+    <Version>2.0.0-beta0</Version>
+    <AssemblyVersion>0.2.0.0</AssemblyVersion>
+    <FileVersion>0.2.0.0</FileVersion>
+    <InformationalVersion>beta2.0.0</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
@@ -23,7 +23,7 @@
   <ItemGroup>
     <Compile Remove="tests\**\*.cs" />
     <None Remove="tests\**\*" />
-    <None Update="Adapters\custom\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="Adapters\native\**\*" Link="Adapters\native\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <EmbeddedResource Include="Localization\*.json" LogicalName="Localization.%(Filename)%(Extension)" />
   </ItemGroup>
 
@@ -61,15 +61,22 @@
     <MakeDir Directories="$(PublishDir)log" />
   </Target>
 
-  <Target Name="BuildExternalAdapterAssembliesForPublish" BeforeTargets="Publish">
-    <MSBuild Projects="@(ExternalAdapterProject)" Targets="Build" BuildInParallel="true" Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework)" />
-  </Target>
-
   <Target Name="CopyExternalAdapterAssembliesForPublish" AfterTargets="Publish">
     <ItemGroup>
-      <CustomAdapterFile Include="$(MSBuildProjectDirectory)\Adapters\custom\**\*" />
+      <CustomAdapterFile Include="$(MSBuildProjectDirectory)\Adapters\native\**\*" />
     </ItemGroup>
-    <Copy SourceFiles="@(CustomAdapterFile)" DestinationFiles="@(CustomAdapterFile->'$(PublishDir)Adapters\custom\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(CustomAdapterFile)" DestinationFiles="@(CustomAdapterFile->'$(PublishDir)Adapters\native\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="RenameAdapterOutputDirectories" BeforeTargets="Build" Condition="'$(OutDir)' != ''">
+    <ItemGroup>
+      <PreviousCustomAdapterFile Include="$(OutDir)Adapters\custom\**\*" />
+      <PreviousIoBrokerAdapterFile Include="$(OutDir)Adapters\IOBroker\**\*" />
+    </ItemGroup>
+    <MakeDir Directories="$(OutDir)Adapters\native;$(OutDir)Adapters\legacy" />
+    <Copy SourceFiles="@(PreviousCustomAdapterFile)" DestinationFiles="@(PreviousCustomAdapterFile->'$(OutDir)Adapters\native\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(PreviousIoBrokerAdapterFile)" DestinationFiles="@(PreviousIoBrokerAdapterFile->'$(OutDir)Adapters\legacy\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <RemoveDir Directories="$(OutDir)Adapters\custom;$(OutDir)Adapters\IOBroker" />
   </Target>
 
   <Target Name="CopyRuntimeArtifactsForPublish" AfterTargets="Publish">

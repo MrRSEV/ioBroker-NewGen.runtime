@@ -1,47 +1,59 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
 namespace ioBroker_NewGen.Core.Matrix
 {
     /// <summary>
-    /// Beschreibt ein Ger�t, einen Kanal oder einen Datenpunkt innerhalb der
-    /// <see cref="SemanticStateMatrix"/>. Dient als Identit�tstr�ger f�r
-    /// einen oder mehrere <see cref="StateNode"/>-Eintr�ge.
+    /// Beschreibt ein Gerät, einen Kanal oder einen Datenpunkt innerhalb der
+    /// <see cref="SemanticStateMatrix"/>. Das semantische Embedding gehört zum
+    /// Objekt und nicht zu einzelnen Wert-/History-Samples.
     /// </summary>
     public sealed class MatrixObject
     {
-        /// <summary>
-        /// Eindeutige ID des Objekts (z. B. "temp.livingroom").
-        /// </summary>
         public required string Id { get; init; }
-
-        /// <summary>
-        /// Sprechender Name des Objekts.
-        /// </summary>
         public required string Name { get; init; }
-
-        /// <summary>
-        /// Typ des Objekts (z. B. "device", "channel", "state").
-        /// </summary>
         public required string Type { get; init; }
-
-        /// <summary>
-        /// Beliebige zus�tzliche Metadaten (Rolle, Einheit, Hersteller etc.).
-        /// </summary>
         public Dictionary<string, string> Meta { get; init; } = new();
-
-        /// <summary>
-        /// Optionale Validierungs- und Semantikdefinition des zugehörigen States.
-        /// </summary>
         public StateDefinition? StateDefinition { get; init; }
 
+        /// <summary>Semantisches Embedding des Objekts.</summary>
+        public float[] Embedding { get; internal set; } = Array.Empty<float>();
+
         /// <summary>
-        /// Baut den Text zusammen, der als Grundlage f�r das semantische
-        /// Objekt-Embedding verwendet wird (Id + Name + Type + Meta).
+        /// Zeitpunkt der letzten erfolgreichen semantischen Aktualisierung.
+        /// DateTime.MinValue bedeutet, dass noch kein Embedding persistiert wurde.
+        /// </summary>
+        public DateTime LastEmbeddingUpdate { get; internal set; }
+
+        /// <summary>
+        /// Kennzeichnet eine ausstehende semantische Verarbeitung.
+        /// </summary>
+        public bool SemanticDirty { get; internal set; } = true;
+
+        internal long SemanticVersion { get; set; } = 1;
+
+        internal void MarkSemanticDirty()
+        {
+            SemanticDirty = true;
+            SemanticVersion++;
+        }
+
+        internal void StoreEmbedding(float[] embedding, DateTime updatedAt)
+        {
+            Embedding = embedding?.ToArray() ?? Array.Empty<float>();
+            LastEmbeddingUpdate = updatedAt;
+            SemanticDirty = false;
+        }
+
+        /// <summary>
+        /// Baut den Text für das semantische Objekt-Embedding aus Id, Name,
+        /// Typ und deterministisch sortierten Metadaten.
         /// </summary>
         public string BuildEmbeddingSourceText()
         {
-            var metaText = string.Join(' ', Meta.Select(kvp => $"{kvp.Key}:{kvp.Value}"));
+            var metaText = string.Join(' ', Meta.OrderBy(entry => entry.Key, StringComparer.Ordinal)
+                .Select(kvp => $"{kvp.Key}:{kvp.Value}"));
             return $"{Id} {Name} {Type} {metaText}".Trim();
         }
     }

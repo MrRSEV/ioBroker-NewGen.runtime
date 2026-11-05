@@ -28,6 +28,7 @@ namespace ioBroker_NewGen.Core.Bridge
         private readonly ILogger _logger;
 
         private readonly ConcurrentDictionary<string, BridgeConnection> _connectionsByAdapterId = new();
+        private NodeAdapterRuntimeApi? _compatibilityApi;
 
         private TcpListener? _listener;
         private CancellationTokenSource? _cts;
@@ -99,6 +100,17 @@ namespace ioBroker_NewGen.Core.Bridge
         }
 
         /// <summary>
+        /// Bindet die optionalen Legacy-Kompatibilitätsdienste an die Bridge.
+        /// Die Bindung kann nach dem Listener-Start erfolgen, weil der
+        /// Prozess-Lifecycle in der Startreihenfolge separat initialisiert wird.
+        /// </summary>
+        public void AttachCompatibilityApi(NodeAdapterRuntimeApi compatibilityApi)
+        {
+            _compatibilityApi = compatibilityApi ?? throw new ArgumentNullException(nameof(compatibilityApi));
+            compatibilityApi.AttachTransport(SendEnvelopeToAdapterAsync);
+        }
+
+        /// <summary>
         /// Stoppt den Listener und schlie�t alle aktiven Verbindungen.
         /// </summary>
         public async Task StopAsync()
@@ -153,7 +165,18 @@ namespace ioBroker_NewGen.Core.Bridge
                 Timestamp = frame.Timestamp
             };
 
-            await connection.SendAsync(envelope);
+            return await SendEnvelopeToAdapterAsync(adapterId, envelope, CancellationToken.None);
+        }
+
+        private async Task<bool> SendEnvelopeToAdapterAsync(string adapterId, BridgeEnvelope envelope, CancellationToken cancellationToken)
+        {
+            if (!_connectionsByAdapterId.TryGetValue(adapterId, out var connection))
+            {
+                _logger.LogWarning($"[TcpBridge] Kein verbundener Adapter mit ID '{adapterId}' gefunden.");
+                return false;
+            }
+
+            await connection.SendAsync(envelope, cancellationToken);
             return true;
         }
 
@@ -291,7 +314,7 @@ namespace ioBroker_NewGen.Core.Bridge
                 switch (envelope.Type)
                 {
                     case BridgeMessageType.Frame:
-                        HandleIncomingFrame(adapterId, envelope);
+                        await HandleIncomingFrameAsync(adapterId, envelope, cancellationToken);
                         break;
 
                     case BridgeMessageType.Heartbeat:
@@ -309,8 +332,14 @@ namespace ioBroker_NewGen.Core.Bridge
             }
         }
 
-        private void HandleIncomingFrame(string adapterId, BridgeEnvelope envelope)
+        private async Task HandleIncomingFrameAsync(string adapterId, BridgeEnvelope envelope, CancellationToken cancellationToken)
         {
+            if (_compatibilityApi is not null &&
+                await _compatibilityApi.HandleCommandAsync(adapterId, envelope, cancellationToken))
+            {
+                return;
+            }
+
             if (string.IsNullOrEmpty(envelope.Address))
             {
                 _logger.LogWarning($"[TcpBridge] Frame von Adapter '{adapterId}' ohne Adresse empfangen � wird verworfen.");

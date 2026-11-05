@@ -1,8 +1,8 @@
-====== Architekturübersicht ======
+# Architekturübersicht
 
-===== Schichtenmodell =====
+## Schichtenmodell
 
-<code>
+```
                 ┌─────────────────────────────┐
                 │ AdminUI.dll (CustomAdapter) │   (Sprint 5)
                 └──────────────┬──────────────┘
@@ -48,61 +48,69 @@
           Querschnitt: Core/Security (SQLite) stellt Benutzer, Rollen, Rechte und
           Sitzungen bereit und meldet Ereignisse über den SystemEventBus; unkritische
           Zustände werden unter system.security.* in die Matrix gespiegelt.
-</code>
+```
 
-===== Zentrale Bausteine =====
+## Zentrale Bausteine
 
-==== Externe Adapter-Assemblies ====
+### Externer Web-Adapter
+
+HTTP- und WebSocket-Hosting liegt nicht im `RuntimeApiHost` und nicht in
+`WebHostService.cs`. Der separat gepflegte native Adapter
+[`ioBroker-NewGen.web`](https://github.com/MrRSEV/ioBroker-NewGen.web) besitzt
+den Listener. Native und Legacy-Adapter registrieren Handler über den Core-
+Vertrag `IWebEndpointRegistry`.
+
+### Externe Adapter-Assemblies
 
 Alle nativen Adapter werden außerhalb des Host-Binaries als eigene DLL geladen:
-''AdminUI.dll'', ''MqttAdapter.dll'', ''ZigbeeAdapter.dll'', ''HueAdapter.dll'',
-''ShellyAdapter.dll'', ''FritzBoxAdapter.dll'', ''BoschAdapter.dll'',
-''KnxAdapter.dll'', ''ModbusAdapter.dll'', ''HomematicAdapter.dll'' und
-''AlexaAdapter.dll''. Der ''CustomAdapterRuntime'' registriert die Instanzen,
-wertet ''IAdapter.Dependencies'' aus und aktiviert nur die in
-''adapter.enabledAdapters'' konfigurierten Adapter.
+`AdminUI.dll`, `MqttAdapter.dll`, `ZigbeeAdapter.dll`, `HueAdapter.dll`,
+`ShellyAdapter.dll`, `FritzBoxAdapter.dll`, `BoschAdapter.dll`,
+`KnxAdapter.dll`, `ModbusAdapter.dll`, `HomematicAdapter.dll` und
+`AlexaAdapter.dll`. Der `CustomAdapterRuntime` registriert die Instanzen,
+wertet `IAdapter.Dependencies` aus und aktiviert nur die in
+`adapter.enabledAdapters` konfigurierten Adapter.
 
-==== MainRuntimeContext ====
+### MainRuntimeContext
 
-''Controllers/MainRuntimeContext.cs''
+`Controllers/MainRuntimeContext.cs`
 
-Applikationsweiter Singleton-RuntimeContext (erbt von ''RSEV.Utilities.Runtime.BaseRuntimeContext'').
+Applikationsweiter Singleton-RuntimeContext (erbt von `RSEV.Utilities.Runtime.BaseRuntimeContext`).
 Hält zentrale Infrastruktur-Instanzen, auf die alle Lifecycle-Hooks
-(''IFirstRun'', ''IOnStart'', ''IOnStop'') zugreifen:
+(`IFirstRun`, `IOnStart`, `IOnStop`) zugreifen:
 
-  * **Logger** – eigener ''SystemLog'', schreibt ''latest.log'' ins Basisverzeichnis
-  * **Config** – ''ConfConfig'' (RSEV.Utilities-Konfigurationsregister, key/value aus ''config.toml'')
-  * **Matrix** – ''SemanticStateMatrix'' Instanz (Property ''Matrix'')
-  * **SystemBus** – ''SystemMessageBus'' Instanz, registriert in ''MessageBusRegistry''
-  * **SystemEventBus** – ''SystemEventBus'' Instanz (State-, Adapter- und Security-Events)
-  * **AdapterRouter** – ''AdapterRouter'' Instanz
-  * **AdapterRegistry** – ''AdapterRegistry'' Instanz (Sprint 2)
-  * **TcpBridge** – ''TcpBridgeServer'' Instanz, gestartet in ''OnStart'' (Sprint 2)
-  * **NodeRuntime** – ''NodeAdapterRuntime'' Instanz, gestartet in ''OnStart'' (Sprint 2)
-  * **Security** – ''SecurityService'' Instanz, initialisiert in ''OnStart'' (beta0.3, siehe [[core-security]])
-  * **Localization** – ''LocalizationService'' (''MainRuntimeContext.Localization''), eingebettete Sprachdateien, Sprache aus ''[localization]''; genutzt von Matrix, AdminUI und Adaptern (siehe [[localization]])
+- **Logger** – eigener `SystemLog`, schreibt `latest.log` ins Basisverzeichnis
+- **Config** – `ConfConfig` (RSEV.Utilities-Konfigurationsregister, key/value aus `config.toml`)
+- **Matrix** – `SemanticStateMatrix` Instanz (Property `Matrix`)
+- **SystemBus** – `SystemMessageBus` Instanz, registriert in `MessageBusRegistry`
+- **SystemEventBus** – `SystemEventBus` Instanz (State-, Adapter- und Security-Events)
+- **AdapterRouter** – `AdapterRouter` Instanz
+- **AdapterRegistry** – `AdapterRegistry` Instanz (Sprint 2)
+- **TcpBridge** – `TcpBridgeServer` Instanz, gestartet in `OnStart` (Sprint 2)
+- **NodeRuntime** – `NodeAdapterRuntime` Instanz, gestartet in `OnStart` (Sprint 2)
+- **Security** – `SecurityService` Instanz, initialisiert in `OnStart` (beta0.3, siehe [core-security](core-security.md))
+- **Localization** – `LocalizationService` (`MainRuntimeContext.Localization`), eingebettete Sprachdateien, Sprache aus `[localization]`; genutzt von Matrix, AdminUI und Adaptern (siehe [localization](localization.md))
 
-Initialisierung von Matrix/Bus/Router/Registry über ''InitializeMatrixAndBus(snapshotPath)'',
-TCP-Bridge über ''StartTcpBridgeAsync(port)'', Node-Runtime über ''InitializeNodeRuntime()'',
-Security über ''InitializeSecurityAsync()'' –
-alle aufgerufen in ''Startup/OnStart.cs''. Shutdown über ''ShutdownBridgeAndNodeRuntimeAsync()''
-in ''Startup/OnStop.cs''.
+Initialisierung von Matrix/Bus/Router/Registry über `InitializeMatrixAndBus(snapshotPath)`,
+TCP-Bridge über `StartTcpBridgeAsync(port)`, Node-Runtime über `InitializeNodeRuntime()`,
+Security über `InitializeSecurityAsync()` –
+alle aufgerufen in `Startup/OnStart.cs`. Shutdown über `ShutdownBridgeAndNodeRuntimeAsync()`
+in `Startup/OnStop.cs`.
 
-==== Lifecycle-Ablauf (Main.cs) ====
+### Lifecycle-Ablauf (Main.cs)
 
-  - ''MainRuntimeContext.Instance'' wird erzeugt (Logger, Config, GlobalState etc. werden dabei initialisiert)
-  - Prüfung: Existiert ''config.toml''? → Wenn nein: **FirstRun** (siehe [[runtime-lifecycle]])
-  - **OnStart** wird ausgeführt: Config laden, Matrix/Bus/Router/Registry initialisieren,
-    Snapshot laden, Cron-Snapshot starten, **TCP-Bridge starten, Node-Runtime initialisieren**,
-    **Security-Datenbank öffnen und ggf. Standardadministrator anlegen**
-  - ''UnexpectedUserExitHandler'' registriert CTRL+C / Windows-Exit-Handler
-  - Kommando-Loop läuft, bis ''exit'' eingegeben wird oder ein Abbruchsignal eintrifft
-  - **OnStop** wird ausgeführt: TCP-Bridge & Node-Runtime gestoppt, finaler Snapshot wird
-    geschrieben, System wird sauber beendet
+- `MainRuntimeContext.Instance` wird erzeugt (Logger, Config, GlobalState etc. werden dabei initialisiert)
+- Prüfung: Existiert `config.toml`? → Wenn nein: **FirstRun** (siehe [runtime-lifecycle](runtime-lifecycle.md))
+- **OnStart** wird ausgeführt: Config laden, Matrix/Bus/Router/Registry initialisieren,
+  Snapshot laden, Cron-Snapshot starten, **TCP-Bridge starten, Node-Runtime initialisieren**,
+  **Security-Datenbank öffnen und ggf. Standardadministrator anlegen**
+- `UnexpectedUserExitHandler` registriert CTRL+C / Windows-Exit-Handler
+- Kommando-Loop läuft, bis `exit` eingegeben wird oder ein Abbruchsignal eintrifft
+- **OnStop** wird ausgeführt: TCP-Bridge & Node-Runtime gestoppt, finaler Snapshot wird
+  geschrieben, System wird sauber beendet
 
-===== Namespace-Struktur =====
+## Namespace-Struktur
 
-<code>
+```
 ioBroker-NewGen/
 ├── Controllers/
 │   └── MainRuntimeContext.cs
@@ -123,15 +131,15 @@ ioBroker-NewGen/
 │   ├── UnexpectedUserExitHandler.cs
 │   └── ShutdownSummary.cs
 └── Main.cs
-</code>
+```
 
-===== Verwendete RSEV.Utilities-Bausteine =====
+## Verwendete RSEV.Utilities-Bausteine
 
-  * ''RSEV.Utilities.Runtime.BaseRuntimeContext'' / ''IRuntimeContext'' – Basis für ''MainRuntimeContext''
-  * ''RSEV.Utilities.Configuration.ConfConfig'' / ''IConfig'' – Key/Value-Konfigurationsregister
-  * ''RSEV.Utilities.Logging.SystemLog'' / ''ILogger'' – Datei- und Konsolen-Logging
-  * ''RSEV.Utilities.Messaging.BaseMessageBus'' / ''IMessageBus'' / ''MessageBusRegistry'' – Lifecycle-Gerüst für den SystemBus
-  * ''RSEV.Utilities.Events.BaseEventBus'' / ''EventRegistry<T>'' – Basis des SystemEventBus (inkl. Security-Events)
-  * ''RSEV.Utilities.Lifecycle.IFirstRun'' / ''IOnStart'' / ''IOnStop'' – Lifecycle-Hooks
-  * ''RSEV.Utilities.Processes.NodeProcess'' / ''RuntimeSubprocessBase'' / ''RuntimeProcessController'' –
-    Prozessverwaltung für isolierte Node.js-Adapter (Sprint 2, siehe [[core-bridge]])
+- `RSEV.Utilities.Runtime.BaseRuntimeContext` / `IRuntimeContext` – Basis für `MainRuntimeContext`
+- `RSEV.Utilities.Configuration.ConfConfig` / `IConfig` – Key/Value-Konfigurationsregister
+- `RSEV.Utilities.Logging.SystemLog` / `ILogger` – Datei- und Konsolen-Logging
+- `RSEV.Utilities.Messaging.BaseMessageBus` / `IMessageBus` / `MessageBusRegistry` – Lifecycle-Gerüst für den SystemBus
+- `RSEV.Utilities.Events.BaseEventBus` / `EventRegistry<T>` – Basis des SystemEventBus (inkl. Security-Events)
+- `RSEV.Utilities.Lifecycle.IFirstRun` / `IOnStart` / `IOnStop` – Lifecycle-Hooks
+- `RSEV.Utilities.Processes.NodeProcess` / `RuntimeSubprocessBase` / `RuntimeProcessController` –
+  Prozessverwaltung für isolierte Node.js-Adapter (Sprint 2, siehe [core-bridge](core-bridge.md))

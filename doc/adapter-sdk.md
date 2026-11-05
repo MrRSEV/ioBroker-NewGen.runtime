@@ -1,11 +1,11 @@
-====== Adapter SDK ======
+# Adapter SDK
 
-===== Vertrag =====
+## Vertrag
 
-Ein nativer Adapter implementiert ''ioBroker_NewGen.Core.Adapters.IAdapter''
-oder erbt von ''DeviceAdapterBase''.
+Ein nativer Adapter implementiert `ioBroker_NewGen.Core.Adapters.IAdapter`
+oder erbt von `DeviceAdapterBase`.
 
-<code csharp>
+```csharp
 public sealed class ExampleAdapter : DeviceAdapterBase
 {
     public override string Name => "example";
@@ -17,48 +17,48 @@ public sealed class ExampleAdapter : DeviceAdapterBase
         return Task.CompletedTask;
     }
 }
-</code>
+```
 
-===== Optionale Dependencies =====
+## Optionale Dependencies
 
 Dependencies sind optional. Ein Adapter ohne Dependencies verwendet automatisch
 eine leere Liste. Ein Adapter kann einen anderen Adapter über seinen Namen oder
 seine konkrete ID vor dem eigenen Start anfordern:
 
-<code csharp>
+```csharp
 public override IReadOnlyCollection<string> Dependencies => new[] { "admin" };
-</code>
+```
 
 Der Host startet die Dependencies zuerst, erkennt fehlende Dependencies und
-zyklische Abhängigkeiten und setzt den betroffenen Adapter auf ''Faulted''.
+zyklische Abhängigkeiten und setzt den betroffenen Adapter auf `Faulted`.
 Der Admin-Adapter ist selbst eine externe Assembly und kann deshalb wie jeder
 andere Adapter als Dependency verwendet werden. Eine Dependency muss nicht
 verwendet werden, wenn der Adapter unabhängig laufen kann.
 
-===== Adapter-Lifecycle =====
+## Adapter-Lifecycle
 
-  * ''InitializeAsync'' erhält den begrenzten ''IAdapterContext''.
-  * ''StartAsync'' startet Verbindungen und State-Synchronisation.
-  * ''ReceivePayload'' verarbeitet Commands.
-  * ''SendPayload'' ist der kompatible Vertragsname; ''SendPayloadAsync'' bleibt
-    die asynchrone Implementierungsvariante.
-  * ''StopAsync'' schließt Verbindungen und Timer.
+- `InitializeAsync` erhält den begrenzten `IAdapterContext`.
+- `StartAsync` startet Verbindungen und State-Synchronisation.
+- `ReceivePayload` verarbeitet Commands.
+- `SendPayload` ist der kompatible Vertragsname; `SendPayloadAsync` bleibt
+  die asynchrone Implementierungsvariante.
+- `StopAsync` schließt Verbindungen und Timer.
 
-Assemblies werden über den RSEV.Utilities-''AssemblyLoader'' aus dem Custom-
+Assemblies werden über den RSEV.Utilities-`AssemblyLoader` aus dem Custom-
 Adapterverzeichnis entdeckt. Die Registry vergibt die ID im Format
-''Name.id''.
+`Name.id`.
 
-Der Host trennt Laden/Registrieren von Aktivieren. ''adapter.enabledAdapters''
+Der Host trennt Laden/Registrieren von Aktivieren. `adapter.enabledAdapters`
 enthält die Namen oder IDs der beim Start zu aktivierenden Adapter. Eine
 Dependency wird dabei automatisch vor dem abhängigen Adapter aktiviert.
 
-Der ''IAdapterContext.RoleService'' erlaubt Adaptern den Zugriff auf den
+Der `IAdapterContext.RoleService` erlaubt Adaptern den Zugriff auf den
 zentralen Berechtigungsvertrag. Die Verwaltung selbst bleibt bei der AdminUI;
 deren Rollen- und Benutzerendpunkte ändern die persistente Standard-
-Implementierung ''DefaultRoleService''.
+Implementierung `DefaultRoleService`.
 
-===== Bus-Regeln =====
+## Bus-Regeln
 
-  * ''StateUpdate'' wird über den SystemBus in die StateMatrix gespiegelt.
-  * ''Command'' adressiert den Zieladapter über ''BusFrame.AdapterId''.
-  * Der Systembus interpretiert keine Payload-Semantik.
+- `StateUpdate` wird über den SystemBus in die StateMatrix gespiegelt.
+- `Command` adressiert den Zieladapter über `BusFrame.AdapterId`.
+- Der Systembus interpretiert keine Payload-Semantik.

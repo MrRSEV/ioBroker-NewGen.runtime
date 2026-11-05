@@ -121,7 +121,7 @@ namespace ioBroker_NewGen.Core.Bridge
                     progress?.Invoke("WARNUNG: " + warnings[^1]);
                 }
 
-                var target = Path.Combine(_installer.IoBrokerPath, info.Name);
+                var target = Path.Combine(_installer.LegacyPath, info.Name);
                 var wasRunning = ReadInstances()
                     .Where(id => SplitId(id)?.Name == info.Name && _node.IsRunning(id))
                     .ToList();
@@ -232,6 +232,27 @@ namespace ioBroker_NewGen.Core.Bridge
             try
             {
                 return await RemoveCoreAsync(id);
+            }
+            finally
+            {
+                _gate.Release();
+            }
+        }
+
+        /// <summary>Stoppt die Instanz und nimmt sie aus der Registry; Konfiguration und Instanzliste bleiben erhalten.</summary>
+        public async Task<bool> DetachInstanceAsync(string id, CancellationToken cancellationToken = default)
+        {
+            await _gate.WaitAsync(cancellationToken);
+            try
+            {
+                if (!IsInstance(id))
+                {
+                    return false;
+                }
+
+                await _node.StopAdapterAsync(id);
+                _registry.Unregister(id);
+                return true;
             }
             finally
             {
@@ -413,7 +434,7 @@ namespace ioBroker_NewGen.Core.Bridge
                 return null;
             }
 
-            var directory = Path.Combine(_installer.IoBrokerPath, name);
+            var directory = Path.Combine(_installer.LegacyPath, name);
             return Directory.Exists(directory) ? LegacyAdapterPackage.Read(directory) : null;
         }
 

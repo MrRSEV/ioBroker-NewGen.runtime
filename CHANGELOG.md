@@ -7,11 +7,69 @@ and this project loosely adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.0.0-beta] - 2026-11-05
+
 ### Added
+- Legacy-Socket.IO-Kompatibilität: `publishInstanceMessageAsync(...)` sendet
+  Admin-Instanznachrichten im originalen `im`-Format `{m, s, d}` über die
+  TCP-Bridge; `sendTo(admin.0, "im", ...)` bleibt ebenfalls nutzbar.
+
+### Changed
+- Web-/WebSocket-Endpunkte sind vom `RuntimeApiHost` entkoppelt. Neuer
+  webserver-unabhängiger `IWebEndpointRegistry`-Vertrag und separates natives
+  Web-Adapterprojekt unter `Adapters/ioBroker-NewGen.web` bzw.
+  [github.com/MrRSEV/ioBroker-NewGen.web](https://github.com/MrRSEV/ioBroker-NewGen.web).
+  Native und Legacy-Adapter registrieren dort ihre Endpoints; der externe
+  Web-Adapter besitzt den Listener.
+- Direkter Zugriff installierter Adapter auf `RuntimeApiHost`/
+  `WebHostService.cs` wird mit `[RuntimeApiHost]` geloggt. Nur die betroffene
+  Adapterinstanz wird isoliert beendet und als `Faulted` markiert; Core,
+  RuntimeApiHost, Web-Adapter und andere Adapter bleiben aktiv.
+- `AdminUI.dll` registriert seine bestehenden HTTP-Routen nun über
+  `IWebEndpointRegistry`, hängt vom `web`-Adapter ab und besitzt keinen eigenen
+  Listener mehr. Dadurch bleibt die optionale DLL mit der Schutzregel nutzbar.
+- Die Standardkonfiguration aktiviert den optional installierbaren `web`-
+  Adapter und dokumentiert `web.enabled`, `web.listenHost` sowie `web.port`.
+- `NodeAdapterRuntime.Api` ergänzt Kompatibilitätsdienste für fortgeschrittene
+  Legacy-Adapter: `sendTo`, State-/Objekt-Subscriptions, Notifications,
+  Metadaten, adapter-isolierter File Storage, zentral delegierte Web-Endpunkte
+  und Prozess-Lifecycle. Die TCP-Bridge beantwortet jetzt die zugehörigen
+  Query-/Command-Frames und pusht State-/Objektänderungen an Subscriptions.
+  Legacy-Adapter erstellen keinen eigenen Webserver; Web-Endpunkte werden an
+  `IWebEndpointRegistry` delegiert. Siehe [doc/core-bridge.md](doc/core-bridge.md).
+- Semantische Embeddings sind vom Realtime-State-/History-Pfad entkoppelt.
+  `SetState()` und StateUpdate-Frames erzeugen keine Embeddings mehr und
+  aktualisieren den VectorIndex nicht mehr synchron.
+- `MatrixObject` besitzt nun `Embedding`, `LastEmbeddingUpdate` und
+  `SemanticDirty`; `StateNode` und `HistorySample` enthalten keine Embeddings
+  mehr.
+- Neuer `SemanticEmbeddingWorker` mit 30-Sekunden-Intervall verarbeitet
+  Registrierungen, semantische Objektänderungen und explizite Reindex-Anfragen
+  im Hintergrund.
+- Snapshot-Persistenz trennt Objekt- und History-Zeilen. Alte History-
+  Embeddings werden beim Laden toleriert, aber nicht in History übernommen.
+- Inkrementeller VectorIndex-Updatepfad und `RebuildVectorIndex()` ergänzt.
+- `AdminUI.dll` ist kein Bestandteil des Core-Builds und kein Solution-Projekt
+  mehr. Die DLL kann bei Bedarf manuell unter `Adapters/native` abgelegt werden;
+  der Core kopiert und lädt vorhandene externe Adapter weiterhin generisch.
+  Der `ReleaseCandidateBuilder` übernimmt eine separat gebaute AdminUI.dll
+  automatisch in Release-Artefakte, wenn sie im Workspace vorhanden ist.
+- Dokumentation: [doc/semantic-embeddings.md](doc/semantic-embeddings.md) und
+  aktualisierte [doc/core-matrix.md](doc/core-matrix.md).
+
+## [2.0.0] - In progress
+
+This major version is currently under development; further changes will be added before release. The command implementation is documented in [Doku/core-commands.md](Doku/core-commands.md).
+
+### Added
+- `core-shutdown` / `core-restart` commands (`-shutdown` / `-restart` on the CLI): graceful core stop/restart strictly via `OnStop.OnStopAsync()`, never by killing the PID. Restart uses the new optional `node.restartCommand`, systemd exit code 75 or a self-spawn; it is skipped if OnStop did not finish cleanly. SIGTERM now also triggers the graceful shutdown, and a closed stdin no longer busy-loops the console reader.
+- Command infrastructure: `CoreCommandHost` (console and CLI), `CommandPipeServer`/`CommandPipeClient` (local named pipe / Unix socket, current user only). `ioBroker-NewGen.exe -stop <id>`, `-unload <id>`, `-cmd <name> …` or `-<name> …` send a command to the running core instead of starting a second one (exit codes 0/1/2); the console loop uses the same host.
+- `Commands/AdapterLifecycleControl` (`adapter-lifecycle <stop|unload> <id|name>`): stops native and legacy/Node adapters and optionally removes them from the registry without touching their configuration, as an emergency path when the Admin UI is unavailable. New `CustomAdapterRuntime.UnloadAdapterAsync` and `LegacyAdapterManager.DetachInstanceAsync`; see [Doku/core-commands.md](Doku/core-commands.md).
 - Standalone README, architecture documentation and API reference for the separately maintained Admin UI adapter project.
 
 ### Changed
-- Custom adapter files in `Adapters/custom` are copied to the build and publish output while preserving their directory structure.
+- Native adapter files in `Adapters/native` are copied to the build and publish output while preserving their directory structure.
+- Adapter directories were renamed: `Adapters/custom` to `Adapters/native` and `Adapters/IOBroker` to `Adapters/legacy`.
 
 ## [0.4.2] - 2026-11-01
 
@@ -74,7 +132,7 @@ and this project loosely adheres to [Semantic Versioning](https://semver.org/).
 - `AdapterRouter` erweitert um `AttachTcpBridge(...)`: `IoBroker`-Frames werden nun tatsächlich über die TCP-Bridge an den adressierten Adapter zugestellt, statt nur geloggt zu werden (Sprint-1-Fallback).
 - `MainRuntimeContext` erweitert um `AdapterRegistry`, `TcpBridge`, `NodeRuntime` sowie die Methoden `StartTcpBridgeAsync`, `InitializeNodeRuntime`, `ShutdownBridgeAndNodeRuntimeAsync`.
 - `OnStart`/`OnStop` integrieren den Lifecycle von TCP-Bridge und Node.js-Adapter-Runtime (Port aus `config.toml` → `ipc.ipcPort`, Fallback 5001).
-- DokuWiki-Dokumentation unter `Doku/` erweitert um `core-bridge.txt`, `core-registry.txt`; `architektur.txt`, `core-routing.txt`, `runtime-lifecycle.txt`, `sprintplan.txt`, `start.txt` aktualisiert.
+- Die GitHub-Markdown-Dokumentation unter `Doku/` wurde um `core-bridge.md` und `core-registry.md` erweitert; `architektur.md`, `core-routing.md`, `runtime-lifecycle.md`, `sprintplan.md` und `start.md` wurden aktualisiert.
 
 ## [0.1.0] - 2026-10-05
 

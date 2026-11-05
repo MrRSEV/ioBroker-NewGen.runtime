@@ -2,4 +2,6 @@
 bin/
 obj/
 Legacy/dist/
-tests
+tests/
+.artifacts/
+Adapters/

@@ -27,6 +27,7 @@ using ioBroker_NewGen.Core.Matrix;
 using ioBroker_NewGen.Core.Migration;
 using ioBroker_NewGen.Core.Registry;
 using ioBroker_NewGen.Core.Routing;
+using ioBroker_NewGen.Core.Web;
 using ioBroker_NewGen.Runtime;
 using RSEV.Utilities.ApiBuilder;
 using RSEV.Utilities.Configuration;
@@ -119,8 +120,16 @@ AssertEx.True(File.Exists(Path.Combine(backupPath, "roles.json")), "Rollenablage
 
 var installer = new AdapterInstaller(Path.Combine(tempRoot, "Adapters"));
 installer.EnsureLayout();
+AssertEx.True(Directory.Exists(Path.Combine(tempRoot, "Adapters", "native")), "Native-Adapter müssen im nativen Verzeichnis abgelegt werden.");
+AssertEx.True(Directory.Exists(Path.Combine(tempRoot, "Adapters", "legacy")), "Legacy-Adapter müssen im Legacy-Verzeichnis abgelegt werden.");
 var installed = installer.InstallCustomAssembly(Path.Combine(AppContext.BaseDirectory, "RSEV.Utilities.dll"));
 AssertEx.True(File.Exists(installed), "Custom-Assembly muss installierbar sein.");
+
+var legacyPackageSource = Path.Combine(tempRoot, "legacy-package-source");
+Directory.CreateDirectory(legacyPackageSource);
+File.WriteAllText(Path.Combine(legacyPackageSource, "package.json"), "{}");
+var installedLegacyPackage = installer.InstallLegacyAdapterDirectory("legacy-fixture", legacyPackageSource);
+AssertEx.True(File.Exists(Path.Combine(installedLegacyPackage, "package.json")), "Legacy-Adapter müssen im Legacy-Verzeichnis installierbar sein.");
 
 var packageRoot = Path.Combine(tempRoot, "package");
 Directory.CreateDirectory(packageRoot);
@@ -223,7 +232,7 @@ const string buildConfiguration = "Debug";
 const string buildConfiguration = "Release";
 #endif
 var repositoryRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
-var releaseAdapterDirectory = Path.Combine(repositoryRoot, "bin", buildConfiguration, "net9.0", "Adapters", "custom");
+var releaseAdapterDirectory = Path.Combine(repositoryRoot, "bin", buildConfiguration, "net9.0", "Adapters", "native");
 AssertEx.True(Directory.Exists(releaseAdapterDirectory), "Der Integrationstest muss die Adapter-DLLs der aktuellen Build-Konfiguration finden.");
 await releaseBuilder.BuildAsync(publishRoot, releaseRoot, adapterAssemblyDirectories: new[] { releaseAdapterDirectory });
 AssertEx.True(await releaseBuilder.VerifyAsync(releaseRoot), "Release-Candidate-Manifest und Hashes müssen verifizierbar sein.");
@@ -234,7 +243,7 @@ var requiredAdapterAssemblies = new[]
     "HomematicAdapter.dll", "AlexaAdapter.dll"
 };
 AssertEx.True(
-    requiredAdapterAssemblies.All(assembly => File.Exists(Path.Combine(releaseRoot, "Adapters", "custom", assembly))),
+    requiredAdapterAssemblies.All(assembly => File.Exists(Path.Combine(releaseRoot, "Adapters", "native", assembly))),
     "Release-Candidate muss alle externen Adapter-DLLs enthalten.");
 
 using (var releaseSigningKey = System.Security.Cryptography.RSA.Create(2048))
@@ -282,7 +291,7 @@ if (args.Length == 2 && string.Equals(args[0], "--release-publish", StringCompar
         await releaseBuilder.VerifyAsync(actualReleaseRoot),
         "Das reale dotnet-publish-Verzeichnis muss direkt als Release-Candidate verifizierbar sein.");
     AssertEx.True(
-        requiredAdapterAssemblies.All(assembly => File.Exists(Path.Combine(actualReleaseRoot, "Adapters", "custom", assembly))),
+        requiredAdapterAssemblies.All(assembly => File.Exists(Path.Combine(actualReleaseRoot, "Adapters", "native", assembly))),
         "Der reale Release-Candidate muss alle externen Adapter-DLLs enthalten.");
 }
 
@@ -564,6 +573,7 @@ sealed class TestAdapterContext : IAdapterContext
         SystemBus = systemBus;
         Router = router;
         AdapterRegistry = adapterRegistry;
+        WebEndpoints = new WebEndpointRegistry();
     }
 
     public SemanticStateMatrix Matrix { get; }
@@ -575,6 +585,8 @@ sealed class TestAdapterContext : IAdapterContext
     public AdapterRouter Router { get; }
 
     public AdapterRegistry AdapterRegistry { get; }
+
+    public IWebEndpointRegistry WebEndpoints { get; }
 
     public AdapterInstaller? AdapterInstaller => null;
 

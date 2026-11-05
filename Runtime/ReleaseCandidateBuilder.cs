@@ -61,7 +61,7 @@ namespace ioBroker_NewGen.Runtime
 
             if (adapterAssemblyDirectories is not null)
             {
-                var adapterTarget = Path.Combine(target, "Adapters", "custom");
+                var adapterTarget = Path.Combine(target, "Adapters", "native");
                 Directory.CreateDirectory(adapterTarget);
                 foreach (var adapterDirectory in adapterAssemblyDirectories)
                 {
@@ -77,6 +77,11 @@ namespace ioBroker_NewGen.Runtime
                 }
             }
 
+            // AdminUI bleibt ein optionaler, separat gebauter Adapter. Für
+            // Release-Artefakte wird eine vorhandene AdminUI.dll automatisch
+            // übernommen, ohne das Core-Projekt davon abhängig zu machen.
+            CopyOptionalAdminUiAssembly(source, target, adapterAssemblyDirectories);
+
             var releaseManifest = manifest ?? new ReleaseCandidateManifest();
             foreach (var requiredArtifact in releaseManifest.RequiredArtifacts)
             {
@@ -86,8 +91,8 @@ namespace ioBroker_NewGen.Runtime
                 }
             }
 
-            releaseManifest.AdapterAssemblies = Directory.Exists(Path.Combine(target, "Adapters", "custom"))
-                ? Directory.EnumerateFiles(Path.Combine(target, "Adapters", "custom"), "*.dll", SearchOption.TopDirectoryOnly)
+            releaseManifest.AdapterAssemblies = Directory.Exists(Path.Combine(target, "Adapters", "native"))
+                ? Directory.EnumerateFiles(Path.Combine(target, "Adapters", "native"), "*.dll", SearchOption.TopDirectoryOnly)
                     .Select(Path.GetFileName)
                     .Where(name => !string.IsNullOrWhiteSpace(name))
                     .Cast<string>()
@@ -100,6 +105,64 @@ namespace ioBroker_NewGen.Runtime
             await using var stream = File.Create(manifestPath);
             await JsonSerializer.SerializeAsync(stream, releaseManifest, ManifestJsonOptions, cancellationToken);
             return target;
+        }
+
+        private static void CopyOptionalAdminUiAssembly(
+            string publishDirectory,
+            string targetDirectory,
+            IEnumerable<string>? adapterAssemblyDirectories)
+        {
+            var targetPath = Path.Combine(targetDirectory, "Adapters", "native", "AdminUI.dll");
+            if (File.Exists(targetPath))
+            {
+                return;
+            }
+
+            var candidates = new List<string>();
+            if (adapterAssemblyDirectories is not null)
+            {
+                foreach (var directory in adapterAssemblyDirectories)
+                {
+                    if (!string.IsNullOrWhiteSpace(directory))
+                    {
+                        candidates.Add(Path.Combine(directory, "AdminUI.dll"));
+                    }
+                }
+            }
+
+            foreach (var root in EnumerateAncestorDirectories(publishDirectory).Concat(
+                         EnumerateAncestorDirectories(AppContext.BaseDirectory)))
+            {
+                candidates.Add(Path.Combine(root, "Adapters", "native", "AdminUI.dll"));
+                candidates.Add(Path.Combine(root, "Adapters", "custom", "AdminUI.dll"));
+                candidates.Add(Path.Combine(root, "Adapters", "admin", "AdminUI.dll"));
+                candidates.Add(Path.Combine(root, "Adapters", "ioBroker-NewGen.admin", "bin", "AdminUI.dll"));
+                candidates.Add(Path.Combine(root, "Adapters", "ioBroker-NewGen.admin", "bin", "Debug", "AdminUI.dll"));
+                candidates.Add(Path.Combine(root, "Adapters", "ioBroker-NewGen.admin", "bin", "Release", "AdminUI.dll"));
+            }
+
+            var sourcePath = candidates
+                .Where(File.Exists)
+                .Select(Path.GetFullPath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault();
+            if (sourcePath is null)
+            {
+                return;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+            File.Copy(sourcePath, targetPath, overwrite: true);
+        }
+
+        private static IEnumerable<string> EnumerateAncestorDirectories(string path)
+        {
+            var current = new DirectoryInfo(Path.GetFullPath(path));
+            while (current is not null)
+            {
+                yield return current.FullName;
+                current = current.Parent;
+            }
         }
 
         public async Task<bool> VerifyAsync(

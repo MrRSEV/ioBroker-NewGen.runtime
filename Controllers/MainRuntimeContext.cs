@@ -10,6 +10,7 @@ using ioBroker_NewGen.Core.Adapters;
 using ioBroker_NewGen.Core.Events;
 using ioBroker_NewGen.Core.Deployment;
 using ioBroker_NewGen.Core.Backup;
+using ioBroker_NewGen.Core.Web;
 using RSEV.Utilities.Events;
 
 namespace ioBroker_NewGen.Controllers
@@ -37,6 +38,12 @@ namespace ioBroker_NewGen.Controllers
         public SemanticStateMatrix Matrix { get; private set; } = null!;
 
         /// <summary>
+        /// Hintergrund-Worker für dirty MatrixObjects. Das Standardintervall
+        /// beträgt 30 Sekunden.
+        /// </summary>
+        public SemanticEmbeddingWorker? SemanticWorker { get; private set; }
+
+        /// <summary>
         /// Zentraler, neutraler Datenbus des Systems (BusFrame-Transport).
         /// </summary>
         public SystemMessageBus SystemBus { get; private set; } = null!;
@@ -45,6 +52,12 @@ namespace ioBroker_NewGen.Controllers
         /// RSEV.Utilities-basierter EventBus für State- und Adapterereignisse.
         /// </summary>
         public SystemEventBus SystemEventBus { get; private set; } = null!;
+
+        /// <summary>
+        /// Webserver-unabhängiger Endpoint-Vertrag. Der eigentliche Listener
+        /// läuft im separat installierbaren Web-Adapter.
+        /// </summary>
+        public IWebEndpointRegistry WebEndpoints { get; private set; } = null!;
 
         /// <summary>
         /// Entscheidet, ob Frames intern (Custom-Adapter) oder �ber die
@@ -83,6 +96,24 @@ namespace ioBroker_NewGen.Controllers
         public AdapterRepositoryClient? AdapterRepositoryClient { get; private set; }
 
         public BackupService? BackupService { get; private set; }
+
+        /// <summary>Alle Core-Commands (Konsole, CLI-Pipe); weitere Commands über <c>Commands.Register</c>.</summary>
+        public ioBroker_NewGen.Commands.CoreCommandHost Commands => _commands ??= new ioBroker_NewGen.Commands.CoreCommandHost(this);
+
+        private ioBroker_NewGen.Commands.CoreCommandHost? _commands;
+        private ioBroker_NewGen.Commands.CommandPipeServer? _commandPipe;
+
+        /// <summary>Startet den lokalen Steuerkanal (Named Pipe), über den <c>-stop &lt;id&gt;</c> &amp; Co. den laufenden Core erreichen.</summary>
+        public void StartCommandPipe()
+        {
+            if (_commandPipe is not null)
+            {
+                return;
+            }
+
+            _commandPipe = new ioBroker_NewGen.Commands.CommandPipeServer(Commands, Logger);
+            _commandPipe.Start();
+        }
 
         /// <summary>
         /// Eingebettete Sprachweiche (Sprache aus [localization]); von Matrix, AdminUI und Adaptern genutzt.
@@ -214,9 +245,11 @@ namespace ioBroker_NewGen.Controllers
                 roleService: new DefaultRoleService(roleStorePath),
                 eventBus: SystemEventBus);
             Matrix.Localization = Localization;
+            SemanticWorker ??= new SemanticEmbeddingWorker(Matrix, TimeSpan.FromSeconds(30));
 
             AdapterRouter ??= new AdapterRouter(SystemBus, Logger);
             AdapterRegistry ??= new AdapterRegistry(SystemEventBus);
+            WebEndpoints ??= new WebEndpointRegistry();
 
             if (!_matrixBusWired)
             {
@@ -225,6 +258,22 @@ namespace ioBroker_NewGen.Controllers
                 SystemBus.Subscribe("*", frame => Matrix.ApplyFrame(frame));
                 _matrixBusWired = true;
             }
+        }
+
+        public void StartSemanticEmbeddingWorker()
+        {
+            SemanticWorker?.Start();
+        }
+
+        public int FlushSemanticEmbeddings()
+        {
+            SemanticWorker?.Stop();
+            return Matrix.ProcessDirtySemanticObjects();
+        }
+
+        public void StopSemanticEmbeddingWorker()
+        {
+            SemanticWorker?.Stop();
         }
 
         /// <summary>
@@ -259,7 +308,11 @@ namespace ioBroker_NewGen.Controllers
                 AdapterRegistry,
                 Logger,
                 crashRestartDelay,
-                healthCheckInterval);
+                healthCheckInterval,
+                Matrix,
+                SystemBus,
+                webEndpointRegistry: WebEndpoints);
+            TcpBridge?.AttachCompatibilityApi(NodeRuntime.Api);
             NodeRuntime.StartHealthMonitoring();
         }
 
@@ -280,7 +333,8 @@ namespace ioBroker_NewGen.Controllers
                 AdapterInstaller,
                 AdapterPackageInstaller,
                 AdapterRepositoryClient,
-                LegacyAdapters);
+                LegacyAdapters,
+                WebEndpoints);
         }
 
         public void InitializeLegacyAdapters(string bridgeHost, int bridgePort)
@@ -337,6 +391,12 @@ namespace ioBroker_NewGen.Controllers
         /// </summary>
         public async Task ShutdownBridgeAndNodeRuntimeAsync()
         {
+            if (_commandPipe is not null)
+            {
+                await _commandPipe.DisposeAsync();
+                _commandPipe = null;
+            }
+
             if (CustomAdapterRuntime is not null)
             {
                 await CustomAdapterRuntime.DisposeAsync();

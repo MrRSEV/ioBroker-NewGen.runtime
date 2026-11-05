@@ -29,9 +29,12 @@ namespace ioBroker_NewGen.Startup
             rtx.Config.Set("admin.adminPort", 8080);
             rtx.Config.Set("admin.adminRequireAuthentication", true);
             rtx.Config.Set("admin.adminToken", string.Empty);
-            rtx.Config.Set("adapter.customAdapterDirectory", "Adapters/custom");
+            rtx.Config.Set("web.enabled", true);
+            rtx.Config.Set("web.listenHost", "127.0.0.1");
+            rtx.Config.Set("web.port", 8080);
+            rtx.Config.Set("adapter.customAdapterDirectory", "Adapters/native");
             rtx.Config.Set("adapter.adapterRootPath", "Adapters");
-            rtx.Config.Set("adapter.enabledAdapters", new[] { "admin" });
+            rtx.Config.Set("adapter.enabledAdapters", new[] { "web" });
             rtx.Config.Set("adapter.requireSignedPackages", false);
             rtx.Config.Set("adapter.trustedPackagePublicKeyPem", string.Empty);
             rtx.Config.Set("adapter.legacyAutoStart", false);
@@ -91,6 +94,15 @@ namespace ioBroker_NewGen.Startup
                     firstRunLineFound = true;
                     firstRunWasTrue = value is bool enabled && enabled;
                 }
+            }
+
+            var customAdapterDirectory = rtx.Config.Get<string>("adapter.customAdapterDirectory");
+            if (string.Equals(
+                customAdapterDirectory?.Replace('\\', '/'),
+                "Adapters/custom",
+                StringComparison.OrdinalIgnoreCase))
+            {
+                rtx.Config.Set("adapter.customAdapterDirectory", "Adapters/native");
             }
 
             // Ein vorhandenes Konfigurationsdokument bedeutet, dass der Erststart
