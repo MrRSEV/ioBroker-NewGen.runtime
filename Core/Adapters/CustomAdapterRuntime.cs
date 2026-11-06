@@ -123,8 +123,8 @@ namespace ioBroker_NewGen.Core.Adapters
             }
 
             var registration = instanceId is null
-                ? _adapterRegistry.Register(adapter.Name, AdapterType.Custom)
-                : _adapterRegistry.RegisterWithId(adapter.Name, AdapterType.Custom, instanceId);
+                ? _adapterRegistry.Register(adapter.Name, AdapterType.Custom, version: adapter.Version)
+                : _adapterRegistry.RegisterWithId(adapter.Name, AdapterType.Custom, instanceId, version: adapter.Version);
             adapter.Id = registration.Id;
             var schema = adapter.ConfigSchema
                 ?? Configuration.AdapterConfigSchema.FromDirectory(System.IO.Path.GetDirectoryName(adapter.GetType().Assembly.Location));

@@ -6,18 +6,21 @@
     <RootNamespace>ioBroker_NewGen</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>2.0.0-beta0</Version>
+    <Version>2.1.0-beta</Version>
+    <AssemblyName>ioBroker-NewGen.runtime-$(Version)</AssemblyName>
     <AssemblyVersion>0.2.0.0</AssemblyVersion>
     <FileVersion>0.2.0.0</FileVersion>
-    <InformationalVersion>beta2.0.0</InformationalVersion>
+    <InformationalVersion>beta2.1.0</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
+  <!-- Jede DLL aus lib\ wird automatisch referenziert (kein expliziter Dateiname nötig). -->
   <ItemGroup>
-    <Reference Include="RSEV.Utilities">
-      <HintPath>libs\RSEV.Utilities.dll</HintPath>
+    <LibDll Include="lib\*.dll" />
+    <Reference Include="@(LibDll)">
       <Private>true</Private>
     </Reference>
+    <None Remove="lib\**" />
   </ItemGroup>
 
   <ItemGroup>

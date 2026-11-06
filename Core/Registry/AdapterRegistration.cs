@@ -36,6 +36,19 @@ namespace ioBroker_NewGen.Core.Registry
         public Dictionary<string, string> Metadata { get; init; } = new();
 
         /// <summary>
+        /// Optionale Versionsnummer des Adapters; wird als Metadatum "version" gespeichert.
+        /// </summary>
+        public string? Version
+        {
+            get => Metadata.TryGetValue("version", out var version) && !string.IsNullOrWhiteSpace(version) ? version : null;
+            set
+            {
+                if (string.IsNullOrWhiteSpace(value)) Metadata.Remove("version");
+                else Metadata["version"] = value.Trim();
+            }
+        }
+
+        /// <summary>
         /// TCP-Endpunkt des Adapters (nur f�r <see cref="AdapterType.IoBroker"/> relevant,
         /// sobald die Verbindung �ber die TCP-Bridge aufgebaut wurde).
         /// </summary>

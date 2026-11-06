@@ -240,6 +240,10 @@ namespace ioBroker_NewGen.Core.Bridge
 
                 adapterId = registration.Id;
                 registration.TcpEndpoint = client.Client.RemoteEndPoint?.ToString();
+                if (handshake.Metadata is not null && handshake.Metadata.TryGetValue("version", out var announcedVersion))
+                {
+                    registration.Version = announcedVersion;
+                }
                 _adapterRegistry.UpdateStatus(adapterId, AdapterStatus.Connected);
 
                 connection.AdapterId = adapterId;

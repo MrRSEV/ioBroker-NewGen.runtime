@@ -34,7 +34,7 @@ namespace ioBroker_NewGen.Core.Registry
         /// Registriert einen neuen Adapter und vergibt, falls noch keine ID gesetzt ist,
         /// automatisch eine neue eindeutige ID im Format "Name.id" (ID beginnt bei 0).
         /// </summary>
-        public AdapterRegistration Register(string name, AdapterType type, Dictionary<string, string>? metadata = null)
+        public AdapterRegistration Register(string name, AdapterType type, Dictionary<string, string>? metadata = null, string? version = null)
         {
             if (string.IsNullOrWhiteSpace(name))
             {
@@ -49,6 +49,7 @@ namespace ioBroker_NewGen.Core.Registry
                 Type = type,
                 Metadata = metadata ?? new Dictionary<string, string>()
             };
+            if (version is not null) registration.Version = version;
 
             _adaptersById[id] = registration;
             _eventBus?.PublishAdapterLifecycle(
@@ -57,7 +58,7 @@ namespace ioBroker_NewGen.Core.Registry
             return registration;
         }
 
-        public AdapterRegistration RegisterWithId(string name, AdapterType type, string id, Dictionary<string, string>? metadata = null)
+        public AdapterRegistration RegisterWithId(string name, AdapterType type,         string id, Dictionary<string, string>? metadata = null, string? version = null)
         {
             if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(id))
             {
@@ -71,6 +72,7 @@ namespace ioBroker_NewGen.Core.Registry
                 Type = type,
                 Metadata = metadata ?? new Dictionary<string, string>()
             };
+            if (version is not null) registration.Version = version;
 
             lock (_idLock)
             {

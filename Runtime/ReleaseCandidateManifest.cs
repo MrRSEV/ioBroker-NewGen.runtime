@@ -17,7 +17,7 @@ namespace ioBroker_NewGen.Runtime
 
         public IReadOnlyCollection<string> RequiredArtifacts { get; init; } = new[]
         {
-            "ioBroker-NewGen.dll",
+            typeof(ReleaseCandidateManifest).Assembly.GetName().Name + ".dll",
             "RSEV.Utilities.dll",
             "config.toml",
             "snapshot.jsonl"

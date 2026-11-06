@@ -7,6 +7,27 @@ and this project loosely adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.1.0-beta] - 2026-11-06
+
+### Added
+- Adapter können sich optional mit einer Versionsnummer melden: neue
+  `IAdapter.Version` (`string?`, Standard `null`, abwärtskompatibel) und
+  `AdapterRegistration.Version` (Metadatum `version`). `AdapterRegistry.Register`/
+  `RegisterWithId` akzeptieren ein optionales `version`-Argument.
+- Legacy-Adapter liefern die Version aus dem Paket (`io-package.json`) oder
+  überschreiben sie im TCP-Handshake über `Metadata["version"]`.
+- `GET /api/adapters` (Admin-Adapter) liefert das Feld `Version`.
+- Dokumentation: neue [Adapter-API-Referenz](doc/adapter-api-referenz.md).
+
+### Changed
+- Assembly-Name enthält die Version (`ioBroker-NewGen.runtime-$(Version)`);
+  Adapter müssen gegen die jeweils aktuelle Runtime-DLL gebaut werden.
+- Abhängigkeits-DLLs werden automatisch aus `lib\` referenziert (kein expliziter
+  Dateiname mehr); `libs\` wurde in `lib\` umbenannt. Admin- und Web-Adapter
+  nutzen dieselbe Struktur und versionierte Assembly-Namen.
+- Release-/Paket-Manifeste und Integrationstests verwenden den tatsächlichen
+  Runtime-Assembly-Namen statt des festen `ioBroker-NewGen.dll`.
+
 ## [2.0.0-beta] - 2026-11-05
 
 ### Added

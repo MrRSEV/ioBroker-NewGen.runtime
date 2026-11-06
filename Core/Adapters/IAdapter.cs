@@ -19,6 +19,12 @@ namespace ioBroker_NewGen.Core.Adapters
         AdapterType Type { get; }
 
         /// <summary>
+        /// Optionale Versionsnummer des Adapters (z. B. "1.0.0"). Wird bei der Registrierung
+        /// übernommen und ist für das Admin-UI über <c>AdapterRegistration.Version</c> lesbar.
+        /// </summary>
+        string? Version => null;
+
+        /// <summary>
         /// Adapter-IDs oder Adapternamen, die vor diesem Adapter gestartet
         /// werden müssen. Ein Eintrag darf entweder exakt auf eine ID wie
         /// <c>admin.0</c> oder auf den Namen <c>admin</c> zeigen.

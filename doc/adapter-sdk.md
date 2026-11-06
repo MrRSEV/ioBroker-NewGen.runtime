@@ -1,5 +1,8 @@
 # Adapter SDK
 
+Eine vollständige Beschreibung aller Typen und Methoden steht in der
+[Adapter-API-Referenz](adapter-api-referenz.md).
+
 ## Vertrag
 
 Ein nativer Adapter implementiert `ioBroker_NewGen.Core.Adapters.IAdapter`

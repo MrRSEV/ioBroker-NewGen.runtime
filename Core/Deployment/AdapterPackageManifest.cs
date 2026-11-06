@@ -51,6 +51,7 @@ namespace ioBroker_NewGen.Core.Deployment
                 if (!string.Equals(Path.GetFileName(file), file, StringComparison.OrdinalIgnoreCase) ||
                     !file.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(file, "ioBroker-NewGen.dll", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(file, typeof(AdapterPackageManifest).Assembly.GetName().Name + ".dll", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(file, "RSEV.Utilities.dll", StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidOperationException($"Adapterpaket darf die Datei '{file}' nicht installieren.");

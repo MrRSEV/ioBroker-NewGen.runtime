@@ -3,7 +3,7 @@
 Diese Dokumentation beschreibt den aktuellen Entwicklungsstand des Projekts
 **ioBroker-CSharp-Fork (ioBroker-NewGen)** mit RSEV.Utilities **3.0.0.0**.
 
-- **Version:** beta0.2.0 / Entwicklungszweig
+- **Version:** v2.0.0-beta / Entwicklungszweig
 - **Zielplattform:** .NET 9
 - **RSEV.Utilities:** 3.0.0.0
 - **Repository:** https://github.com/MrRSEV/ioBroker-NewGen
@@ -42,4 +42,5 @@ Legacy-Runtimes und einer einheitlichen Adapter-API.
 - [Sprintplan & Roadmap](sprintplan.md)
 - [Developer Guide](developer-guide.md)
 - [Adapter SDK](adapter-sdk.md)
+- [Adapter-API-Referenz](adapter-api-referenz.md)
 - [Adaptermigration](migration.md)

@@ -221,7 +221,8 @@ using (var signingKey = System.Security.Cryptography.RSA.Create(2048))
 var publishRoot = Path.Combine(tempRoot, "publish");
 var releaseRoot = Path.Combine(tempRoot, "release-candidate");
 Directory.CreateDirectory(publishRoot);
-File.Copy(Path.Combine(AppContext.BaseDirectory, "ioBroker-NewGen.dll"), Path.Combine(publishRoot, "ioBroker-NewGen.dll"));
+var runtimeDll = typeof(ioBroker_NewGen.Runtime.ReleaseCandidateManifest).Assembly.GetName().Name + ".dll";
+File.Copy(Path.Combine(AppContext.BaseDirectory, runtimeDll), Path.Combine(publishRoot, runtimeDll));
 File.Copy(Path.Combine(AppContext.BaseDirectory, "RSEV.Utilities.dll"), Path.Combine(publishRoot, "RSEV.Utilities.dll"));
 File.WriteAllText(Path.Combine(publishRoot, "config.toml"), "[node]\nnodeId = \"release\"\n");
 File.WriteAllText(Path.Combine(publishRoot, "snapshot.jsonl"), string.Empty);

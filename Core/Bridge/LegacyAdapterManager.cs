@@ -422,8 +422,7 @@ namespace ioBroker_NewGen.Core.Bridge
             _registry.Configs.RegisterSchema(parts.Name, AdapterConfigSchema.FromDirectory(package.Directory));
             if (_registry.Get(id) is null)
             {
-                var registration = _registry.RegisterWithId(parts.Name, Routing.AdapterType.IoBroker, id);
-                registration.Metadata["version"] = package.Version;
+                _registry.RegisterWithId(parts.Name, Routing.AdapterType.IoBroker, id, version: package.Version);
             }
         }
 

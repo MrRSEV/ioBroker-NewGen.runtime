@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.1.0-beta – Adapter-Versionen
+
+- Neue optionale `IAdapter.Version` und `AdapterRegistration.Version`; Legacy-
+  Adapter melden sie per Paket oder TCP-Handshake (`Metadata["version"]`).
+  `GET /api/adapters` liefert `Version`.
+- Versionierter Assembly-Name `ioBroker-NewGen.runtime-$(Version)`,
+  automatische `lib\`-Referenzen (`libs\` → `lib\`).
+- Neue [Adapter-API-Referenz](adapter-api-referenz.md).
+
 ## 2.0.0-beta – Decouple Semantic Embeddings from State History
 
 - Web-/WebSocket-Hosting aus `RuntimeApiHost` herausgelöst: `IWebEndpointRegistry`
