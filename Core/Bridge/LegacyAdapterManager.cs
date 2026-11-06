@@ -375,6 +375,7 @@ namespace ioBroker_NewGen.Core.Bridge
                 return false;
             }
 
+            RefreshAdapterCore(package.Directory);
             EnsureRegistered(id, package);
             var registration = await _node.StartAdapterAsync(
                 parts.Name,
@@ -569,6 +570,26 @@ namespace ioBroker_NewGen.Core.Bridge
             }
 
             return null;
+        }
+
+        /// <summary>Aktualisiert eine bereits installierte, veraltete Kopie des adapter-core-Ersatzes vor dem Start.</summary>
+        private void RefreshAdapterCore(string adapterDirectory)
+        {
+            try
+            {
+                var shim = Path.Combine(_adapterCoreDirectory, "package.json");
+                if (!File.Exists(shim)) return;
+                var current = File.ReadAllText(shim);
+                var nodeModules = Path.Combine(adapterDirectory, "node_modules");
+                var outdated = Directory.Exists(nodeModules) && Directory.EnumerateDirectories(nodeModules, "adapter-core", SearchOption.AllDirectories)
+                    .Where(directory => string.Equals(Path.GetFileName(Path.GetDirectoryName(directory)), "@iobroker", StringComparison.OrdinalIgnoreCase))
+                    .Any(directory => !File.Exists(Path.Combine(directory, "package.json")) || File.ReadAllText(Path.Combine(directory, "package.json")) != current);
+                if (outdated) PatchAdapterCore(adapterDirectory, new List<string>());
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logger.LogWarning($"[Legacy] adapter-core konnte nicht aktualisiert werden: {ex.Message}");
+            }
         }
 
         /// <summary>Ersetzt @iobroker/adapter-core durch den Bridge-Ersatz, damit der Adapter ohne js-controller läuft.</summary>

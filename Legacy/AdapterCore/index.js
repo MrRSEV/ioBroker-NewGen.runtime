@@ -3,36 +3,40 @@
 const path = require('path');
 const fs = require('fs');
 const { Adapter } = require('./Adapter');
+const { EXIT_CODES: REAL_EXIT_CODES } = require('./exitCodes');
+const commonTools = require('./commonTools');
+const I18n = require('./i18n');
+const TokenRefresher = require('./TokenRefresher');
+const Credentials = require('./credentials');
 
 const dataDir = () => path.resolve(process.env.NEWGEN_DATA_DIR || path.join(process.cwd(), 'iobroker-data'));
 
-const EXIT_CODES = Object.freeze({
-  NO_ERROR: 0,
-  JS_CONTROLLER_STOPPED: 1,
-  INVALID_ADAPTER_ID: 10,
-  UNCAUGHT_EXCEPTION: 11,
-  ADAPTER_REQUESTED_TERMINATION: 11,
-  START_IMMEDIATELY_AFTER_STOP: 156,
-  START_AFTER_UPDATE: 157,
-  CANNOT_FIND_ADAPTER_DIR: 20,
-  CANNOT_FIND_ADAPTER_VERSION: 21
-});
+const EXIT_CODES = Object.freeze({ ...REAL_EXIT_CODES });
 
-const isDocker = () => {
+const isDocker = commonTools.isDocker;
+
+function getConfig() {
+  const file = process.env.NEWGEN_IOBROKER_JSON || path.join(dataDir(), 'iobroker.json');
   try {
-    return fs.existsSync('/.dockerenv');
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
   } catch {
-    return false;
+    return { system: { memoryLimitMB: 0, hostname: '', instanceStartInterval: 2000, compact: false, allowShellCommands: false, memLimitWarn: 0, memLimitError: 0 } };
   }
-};
+}
 
 const adapterCore = {
   Adapter,
+  adapter: Adapter,
   controllerDir: path.resolve(__dirname),
   getControllerDir: () => path.resolve(__dirname),
+  getConfig,
   getAbsoluteDefaultDataDir: () => `${dataDir()}${path.sep}`,
-  getAbsoluteInstanceDataDir: adapter => path.join(dataDir(), adapter.namespace),
+  getAbsoluteInstanceDataDir: adapter => path.join(dataDir(), typeof adapter === 'string' ? adapter : adapter.namespace),
   isDocker,
+  commonTools,
+  I18n,
+  TokenRefresher,
+  Credentials,
   EXIT_CODES,
   version: require('./package.json').version
 };

@@ -10,6 +10,7 @@ const { ObjectApi } = require('./ObjectApi');
 const { MessageApi } = require('./MessageApi');
 const { LoggerApi } = require('./LoggerApi');
 const { CompatibilityApi } = require('./CompatibilityApi');
+const { decrypt, encrypt, DEFAULT_SECRET } = require('./crypto');
 
 const UNLOAD_TIMEOUT_MS = 5000;
 
@@ -233,7 +234,18 @@ class Adapter extends EventEmitter {
     if (this._unloaded) return;
     await this._synchronizer.start();
     if (this._unloaded) return;
+    this._secret = await this._objectApi._getSecret();
+    if (this._unloaded) return;
     this.emit('ready');
+  }
+
+  /** decrypt(value) nutzt das System-Secret, decrypt(secret, value) das angegebene. */
+  decrypt(secretOrValue, value) {
+    return value === undefined ? decrypt(this._secret || DEFAULT_SECRET, secretOrValue) : decrypt(secretOrValue, value);
+  }
+
+  encrypt(secretOrValue, value) {
+    return value === undefined ? encrypt(this._secret || DEFAULT_SECRET, secretOrValue) : encrypt(secretOrValue, value);
   }
 
   /** Führt 'unload'-Handler aus (mit Callback, Timeout 5 s) und trennt die Bridge. */

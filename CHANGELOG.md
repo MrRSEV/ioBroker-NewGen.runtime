@@ -7,6 +7,17 @@ and this project loosely adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.2.0-beta] - 2026-11-06
+
+### Added
+- Legacy-Adapter-Provider (`@iobroker/adapter-core` 3.4.3): `Credentials`, `I18n`, `TokenRefresher`, `commonTools`, `getConfig`, vollständige `EXIT_CODES` und Subpfad-Exports (`/credentials`, `/tools`, `/exitCodes`, `/i18n`, `/TokenRefresher`).
+- Adapter-Methoden `getForeignObjects(Async)`, `getObjectList`/`getObjectView` sowie `decrypt`/`encrypt` (System-Secret).
+- Bridge: `ObjectQuery` unterstützt Pattern-/Typ-Abfragen.
+
+### Fixed
+- Legacy-Adapter (z. B. `javascript`) stürzten mit `Cannot find module '@iobroker/adapter-core/credentials'` ab; EXIT_CODES-Werte korrigiert.
+- Veraltete adapter-core-Kopie in bereits installierten Legacy-Adaptern wird vor dem Start aktualisiert.
+
 ## [2.1.1-beta] - 2026-11-06
 
 ### Fixed
@@ -184,3 +195,4 @@ This major version is currently under development; further changes will be added
 
 [0.2.0]: https://github.com/MrRSEV/ioBroker-NewGen/releases/tag/dev-0.2.0
 [0.1.0]: https://github.com/MrRSEV/ioBroker-NewGen/releases/tag/dev-0.1.0
+

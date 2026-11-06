@@ -1,8 +1,17 @@
 {
   "name": "@iobroker/adapter-core",
-  "version": "3.2.3",
+  "version": "3.4.3",
   "description": "Drop-in-Ersatz für @iobroker/adapter-core ohne js-controller (ioBroker-NewGen TCP-Bridge)",
   "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./credentials": "./credentials.js",
+    "./tools": "./tools.js",
+    "./exitCodes": "./exitCodes.js",
+    "./i18n": "./i18n.js",
+    "./TokenRefresher": "./TokenRefresher.js",
+    "./package.json": "./package.json"
+  },
   "license": "MIT",
   "files": [
     "*.js",

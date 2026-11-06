@@ -153,3 +153,4 @@ beta0.2.0-Stand und die Sprint-Zuordnung.
   finalen Snapshots beim Herunterfahren.
 
 [Release-Tag auf GitHub](https://github.com/MrRSEV/ioBroker-NewGen/releases/tag/dev-0.1.0)
+

@@ -2,6 +2,7 @@
 
 const { FrameKind } = require('./BridgeStateSynchronizer');
 const { withCallback, requireId, qualify, deepMerge, isPlainObject } = require('./util');
+const { DEFAULT_SECRET } = require('./crypto');
 
 /** Objekt-Methoden; Mapping: setObject→ObjectCreate, getObject→ObjectQuery, extendObject→ObjectExtend, delObject→ObjectDelete. */
 class ObjectApi {
@@ -35,6 +36,31 @@ class ObjectApi {
     }
     sync.objects.set(fullId, reply.payload);
     return reply.payload;
+  }
+
+  async _readMany(pattern, type) {
+    const { sync } = this.core;
+    const metadata = { multi: 'true' };
+    if (type) metadata.type = String(type);
+    const reply = await sync.request({ frame: 'ObjectQuery', kind: FrameKind.Command, address: pattern, metadata });
+    const result = {};
+    if (reply && reply.payload && typeof reply.payload === 'object') {
+      for (const [id, value] of Object.entries(reply.payload)) {
+        if (value === null || value === undefined) continue;
+        result[id] = value;
+        sync.objects.set(id, value);
+      }
+    }
+    return result;
+  }
+
+  /** System-Secret wie im js-controller: system.config native.secret, sonst Default. */
+  async _getSecret() {
+    if (this._secret === undefined) {
+      const config = await this._read('system.config').catch(() => null);
+      this._secret = (config && config.native && config.native.secret) || DEFAULT_SECRET;
+    }
+    return this._secret;
   }
 
   async _extend(fullId, partial) {
@@ -82,6 +108,23 @@ class ObjectApi {
   setForeignObjectAsync(id, obj) { return this._create(requireId(id), obj, false); }
   getObjectAsync(id) { return this._read(this._own(id)); }
   getForeignObjectAsync(id) { return this._read(requireId(id)); }
+  getForeignObjectsAsync(pattern, type) { return this._readMany(requireId(pattern), typeof type === 'string' ? type : undefined); }
+  async getObjectListAsync(params) {
+    const startkey = (params && params.startkey) || '';
+    const endkey = (params && params.endkey) || '\u9999';
+    const all = await this._readMany('*');
+    const rows = Object.keys(all).filter(id => id >= startkey && id <= endkey).sort().map(id => ({ id, value: all[id] }));
+    return { rows };
+  }
+  async getObjectViewAsync(design, search, params) {
+    const type = search === 'state' || search === 'channel' || search === 'device' || search === 'folder' || search === 'adapter' || search === 'instance' ||
+      search === 'host' || search === 'config' || search === 'user' || search === 'group' || search === 'enum' || search === 'script' ? search : undefined;
+    const startkey = (params && params.startkey) || '';
+    const endkey = (params && params.endkey) || '\u9999';
+    const all = await this._readMany('*', type);
+    const rows = Object.keys(all).filter(id => id >= startkey && id <= endkey).sort().map(id => ({ id, value: all[id] }));
+    return { rows };
+  }
   extendObjectAsync(id, obj) { return this._extend(this._own(id), obj); }
   extendForeignObjectAsync(id, obj) { return this._extend(requireId(id), obj); }
   delObjectAsync(id, options) { return this._delete(this._own(id), options); }
@@ -90,6 +133,10 @@ class ObjectApi {
   unsubscribeObjectsAsync(pattern) { return this._unsubscribe(qualify(this.core.namespace, pattern)); }
   subscribeForeignObjectsAsync(pattern) { return this._subscribe(requireId(pattern)); }
   unsubscribeForeignObjectsAsync(pattern) { return this._unsubscribe(requireId(pattern)); }
+
+  getForeignObjects(...args) { return withCallback(args, a => this.getForeignObjectsAsync(...a)); }
+  getObjectList(...args) { return withCallback(args, a => this.getObjectListAsync(...a)); }
+  getObjectView(...args) { return withCallback(args, a => this.getObjectViewAsync(...a)); }
 
   setObject(...args) { return withCallback(args, a => this.setObjectAsync(...a)); }
   setObjectNotExists(...args) { return withCallback(args, a => this.setObjectNotExistsAsync(...a)); }

@@ -8,17 +8,17 @@ Der Adapter enthält keine eigene TCP-Logik; Heartbeats verwaltet der Client.
 
 ## Einbindung
 
-Als eigenständiges npm-Paket (Drop-in-Ersatz, Version 3.2.3, kein Adapter-Code ändert sich):
+Als eigenständiges npm-Paket (Drop-in-Ersatz, Version 3.4.3, kein Adapter-Code ändert sich):
 
 ```
 cd Legacy\AdapterCore
-npm run pack:package        # erzeugt Legacy/dist/adapter-core/iobroker-adapter-core-3.2.3.tgz
-npm install <pfad>\iobroker-adapter-core-3.2.3.tgz     # im Adapter-Verzeichnis
+npm run pack:package        # erzeugt Legacy/dist/adapter-core/iobroker-adapter-core-3.4.3.tgz
+npm install <pfad>\iobroker-adapter-core-3.4.3.tgz     # im Adapter-Verzeichnis
 ```
 
-Alternativ in der `package.json` des Adapters: `"@iobroker/adapter-core": "file:<pfad>\\iobroker-adapter-core-3.2.3.tgz"`
+Alternativ in der `package.json` des Adapters: `"@iobroker/adapter-core": "file:<pfad>\\iobroker-adapter-core-3.4.3.tgz"`
 (oder `overrides`, falls Abhängigkeiten den Core transitiv beziehen). `NodeAdapterClient.js` wird beim Build unverändert nach `vendor/` kopiert.
-Exporte wie im Original: `Adapter`, `controllerDir`, `getControllerDir`, `getAbsoluteDefaultDataDir`, `getAbsoluteInstanceDataDir`, `isDocker`, `EXIT_CODES`, `version`, `default`
+Exporte wie im Original: `Adapter`, `controllerDir`, `getControllerDir`, `getAbsoluteDefaultDataDir`, `getAbsoluteInstanceDataDir`, `getConfig`, `adapter`, `isDocker`, `commonTools`, `I18n`, `TokenRefresher`, `Credentials` (auch als Subpfade `/credentials`, `/tools`, `/exitCodes`, `/i18n`, `/TokenRefresher`), vollständige `EXIT_CODES`, `version`, `default`. Zusätzlich auf dem Adapter: `getForeignObjects(Async)`, `getObjectList/View`, `decrypt`/`encrypt` (System-Secret aus `system.config`).
 (Datenverzeichnis über `NEWGEN_DATA_DIR`).
 
 ```js
@@ -102,3 +102,4 @@ und den separat installierbaren Web-Adapter delegiert.
 ## Tests
 
 `npm test` (Node ≥ 18; Fake-Bridge im Test, `examples/mqtt-like` als unveränderter mqtt-artiger Adapter).
+

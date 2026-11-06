@@ -15,7 +15,8 @@ fs.mkdirSync(path.join(target, 'vendor'), { recursive: true });
 
 const files = [
   'index.js', 'Adapter.js', 'StateApi.js', 'ObjectApi.js', 'MessageApi.js', 'CompatibilityApi.js', 'LoggerApi.js',
-  'SubscriptionManager.js', 'BridgeStateSynchronizer.js', 'util.js', 'package.json', 'README.md'
+  'SubscriptionManager.js', 'BridgeStateSynchronizer.js', 'util.js', 'crypto.js', 'commonTools.js', 'credentials.js',
+  'exitCodes.js', 'i18n.js', 'TokenRefresher.js', 'tools.js', 'package.json', 'README.md'
 ];
 for (const file of files) fs.copyFileSync(path.join(source, file), path.join(target, file));
 fs.copyFileSync(clientFile, path.join(target, 'vendor', 'NodeAdapterClient.js'));

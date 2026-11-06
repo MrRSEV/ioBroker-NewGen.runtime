@@ -264,3 +264,18 @@ test('mqtt-like example adapter starts unchanged', async () => {
   await adapter._shutdown();
   await bridge.close();
 });
+
+test('adapter-core 3.4.x API: Credentials, EXIT_CODES, commonTools, crypto', () => {
+  assert.strictEqual(typeof utils.Credentials.listCredentials, 'function');
+  assert.strictEqual(typeof utils.Credentials.getCredentials, 'function');
+  assert.strictEqual(utils.EXIT_CODES.INVALID_ADAPTER_ID, 5);
+  assert.strictEqual(utils.EXIT_CODES.CANNOT_FIND_ADAPTER_DIR, 10);
+  assert.strictEqual(typeof utils.commonTools.password, 'function');
+  assert.strictEqual(typeof utils.I18n.init, 'function');
+  assert.strictEqual(typeof utils.TokenRefresher.TokenRefresher, 'function');
+  const { encrypt, decrypt } = require('../crypto');
+  const key = '0123456789abcdef0123456789abcdef0123456789abcdef';
+  assert.strictEqual(decrypt(key, encrypt(key, 'secret')), 'secret');
+  assert.strictEqual(decrypt('legacy', encrypt('legacy', 'secret')), 'secret');
+});
+

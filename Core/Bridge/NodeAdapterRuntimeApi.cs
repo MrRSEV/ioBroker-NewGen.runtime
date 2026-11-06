@@ -306,7 +306,7 @@ namespace ioBroker_NewGen.Core.Bridge
                     await ReplyAsync(sourceAdapterId, envelope, frame, QueryStates(envelope.Address, metadata), cancellationToken);
                     return true;
                 case "objectquery":
-                    await ReplyAsync(sourceAdapterId, envelope, frame, QueryObject(envelope.Address), cancellationToken);
+                    await ReplyAsync(sourceAdapterId, envelope, frame, metadata.ContainsKey("multi") ? QueryObjects(envelope.Address, metadata) : QueryObject(envelope.Address), cancellationToken);
                     return true;
                 case "objectcreate":
                     await StoreObjectAsync(sourceAdapterId, envelope.Address, DecodePayload(envelope), false, envelope, cancellationToken);
@@ -373,6 +373,21 @@ namespace ioBroker_NewGen.Core.Bridge
             }
 
             return _matrix.GetState(pattern) is { } state ? ToStatePayload(state) : null!;
+        }
+
+        private object QueryObjects(string? address, IReadOnlyDictionary<string, string> metadata)
+        {
+            var pattern = string.IsNullOrWhiteSpace(address) ? "*" : address;
+            metadata.TryGetValue("type", out var type);
+            var result = new Dictionary<string, object?>(StringComparer.Ordinal);
+            foreach (var entry in _objects)
+            {
+                if (!Matches(pattern, entry.Key)) continue;
+                if (!string.IsNullOrEmpty(type) &&
+                    !(entry.Value is JsonObject obj && obj["type"]?.ToString() == type)) continue;
+                result[entry.Key] = entry.Value;
+            }
+            return result;
         }
 
         private object? QueryObject(string? address)
