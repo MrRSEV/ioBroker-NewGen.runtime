@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.1-beta – Fixes
+
+- Adapter-DLLs landen wieder direkt in `Adapters\native` (kein doppelter Pfad im Build).
+- Standard-`enabledAdapters` enthält `web` und `admin`.
+
 ## 2.1.0-beta – Adapter-Versionen
 
 - Neue optionale `IAdapter.Version` und `AdapterRegistration.Version`; Legacy-

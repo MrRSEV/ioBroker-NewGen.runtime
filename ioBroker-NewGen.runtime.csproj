@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -6,11 +6,11 @@
     <RootNamespace>ioBroker_NewGen</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>2.1.0-beta</Version>
+    <Version>2.1.1-beta</Version>
     <AssemblyName>ioBroker-NewGen.runtime-$(Version)</AssemblyName>
     <AssemblyVersion>0.2.0.0</AssemblyVersion>
     <FileVersion>0.2.0.0</FileVersion>
-    <InformationalVersion>beta2.1.0</InformationalVersion>
+    <InformationalVersion>beta2.1.1</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
@@ -26,7 +26,7 @@
   <ItemGroup>
     <Compile Remove="tests\**\*.cs" />
     <None Remove="tests\**\*" />
-    <None Update="Adapters\native\**\*" Link="Adapters\native\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="Adapters\native\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <EmbeddedResource Include="Localization\*.json" LogicalName="Localization.%(Filename)%(Extension)" />
   </ItemGroup>
 

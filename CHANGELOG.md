@@ -7,6 +7,12 @@ and this project loosely adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.1.1-beta] - 2026-11-06
+
+### Fixed
+- Adapter-DLLs wurden beim Build doppelt verschachtelt nach `Adapters\native\Adapters\native\` kopiert und von der Runtime nicht gefunden (falsches `Link` in der csproj).
+- Standardkonfiguration (`enabledAdapters`) aktiviert jetzt `web` und `admin`; zuvor wurde das Admin-UI nicht gestartet ("Web endpoint not found").
+
 ## [2.1.0-beta] - 2026-11-06
 
 ### Added

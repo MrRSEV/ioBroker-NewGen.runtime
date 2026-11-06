@@ -34,7 +34,7 @@ namespace ioBroker_NewGen.Startup
             rtx.Config.Set("web.port", 8080);
             rtx.Config.Set("adapter.customAdapterDirectory", "Adapters/native");
             rtx.Config.Set("adapter.adapterRootPath", "Adapters");
-            rtx.Config.Set("adapter.enabledAdapters", new[] { "web" });
+            rtx.Config.Set("adapter.enabledAdapters", new[] { "web", "admin" });
             rtx.Config.Set("adapter.requireSignedPackages", false);
             rtx.Config.Set("adapter.trustedPackagePublicKeyPem", string.Empty);
             rtx.Config.Set("adapter.legacyAutoStart", false);

@@ -46,7 +46,7 @@ namespace ioBroker_NewGen.Startup
                         "adapterDirectory = \"/var/newgen/adapters\"",
                         "customAdapterDirectory = \"Adapters/native\"",
                         "adapterRootPath = \"Adapters\"",
-                        "enabledAdapters = [\"web\"]",
+                        "enabledAdapters = [\"web\", \"admin\"]",
                         "requireSignedPackages = false",
                         "trustedPackagePublicKeyPem = \"\"",
                         "legacyAutoStart = false",
