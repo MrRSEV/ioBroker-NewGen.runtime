@@ -263,6 +263,30 @@ namespace ioBroker_NewGen.Core.Matrix
             }
         }
 
+        public IReadOnlyDictionary<string, MatrixObject> GetObjects(string pattern = "*")
+        {
+            if (string.IsNullOrWhiteSpace(pattern))
+            {
+                return new Dictionary<string, MatrixObject>(StringComparer.Ordinal);
+            }
+
+            var regex = new Regex(
+                "^" + Regex.Escape(pattern).Replace("\\*", ".*") + "$",
+                RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
+            _matrixLock.EnterReadLock();
+            try
+            {
+                return _objects
+                    .Where(entry => regex.IsMatch(entry.Key))
+                    .ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.Ordinal);
+            }
+            finally
+            {
+                _matrixLock.ExitReadLock();
+            }
+        }
+
         /// <summary>
         /// Entfernt ein Objekt, den zugehörigen State und den Indexeintrag.
         /// </summary>

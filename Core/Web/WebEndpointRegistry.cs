@@ -25,6 +25,9 @@ namespace ioBroker_NewGen.Core.Web
 
         public string Method { get; init; } = "GET";
 
+        /// <summary>Query-String ohne führendes "?" (leer, wenn keiner vorhanden ist).</summary>
+        public string Query { get; init; } = string.Empty;
+
         public IReadOnlyDictionary<string, string> Headers { get; init; } =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
@@ -94,6 +97,8 @@ namespace ioBroker_NewGen.Core.Web
 
         bool Unregister(string ownerId, string route);
 
+        bool CanDispatch(string route, WebEndpointKind kind);
+
         Task<WebEndpointResponse> DispatchAsync(WebEndpointRequest request, CancellationToken cancellationToken = default);
     }
 
@@ -109,9 +114,13 @@ namespace ioBroker_NewGen.Core.Web
     /// </summary>
     public sealed class WebEndpointRegistry : IWebEndpointRegistry
     {
+        // Schlüssel = Art + Route, damit HTTP und WebSocket dieselbe Route (z. B. "/") teilen können.
+        // Routen mit der Endung "/*" gelten als Präfix-Routen.
         private readonly ConcurrentDictionary<string, WebEndpointRegistration> _registrations = new(StringComparer.OrdinalIgnoreCase);
 
         public IReadOnlyCollection<WebEndpointRegistration> Registrations => _registrations.Values.ToArray();
+
+        private static string KeyOf(WebEndpointKind kind, string route) => $"{kind}:{route}";
 
         public bool Register(string ownerId, string route, WebEndpointKind kind, WebEndpointHandler handler)
         {
@@ -119,8 +128,9 @@ namespace ioBroker_NewGen.Core.Web
             if (string.IsNullOrWhiteSpace(route) || !route.StartsWith('/')) throw new ArgumentException("Route muss mit '/' beginnen.", nameof(route));
             ArgumentNullException.ThrowIfNull(handler);
 
-            var key = NormalizeRoute(route);
-            var registration = new WebEndpointRegistration(ownerId, key, kind, handler);
+            var normalized = NormalizeRoute(route);
+            var key = KeyOf(kind, normalized);
+            var registration = new WebEndpointRegistration(ownerId, normalized, kind, handler);
             while (true)
             {
                 if (_registrations.TryGetValue(key, out var current) && !string.Equals(current.OwnerId, ownerId, StringComparison.OrdinalIgnoreCase))
@@ -140,29 +150,53 @@ namespace ioBroker_NewGen.Core.Web
 
         public bool Unregister(string ownerId, string route)
         {
-            var key = NormalizeRoute(route);
-            return _registrations.TryGetValue(key, out var current) &&
-                   string.Equals(current.OwnerId, ownerId, StringComparison.OrdinalIgnoreCase) &&
-                   _registrations.TryRemove(new KeyValuePair<string, WebEndpointRegistration>(key, current));
+            var normalized = NormalizeRoute(route);
+            var removed = false;
+            foreach (var kind in new[] { WebEndpointKind.Http, WebEndpointKind.WebSocket })
+            {
+                var key = KeyOf(kind, normalized);
+                removed |= _registrations.TryGetValue(key, out var current) &&
+                           string.Equals(current.OwnerId, ownerId, StringComparison.OrdinalIgnoreCase) &&
+                           _registrations.TryRemove(new KeyValuePair<string, WebEndpointRegistration>(key, current));
+            }
+
+            return removed;
+        }
+
+        private WebEndpointRegistration? Find(WebEndpointKind kind, string route)
+        {
+            if (_registrations.TryGetValue(KeyOf(kind, route), out var exact)) return exact;
+
+            WebEndpointRegistration? best = null;
+            foreach (var candidate in _registrations.Values)
+            {
+                if (candidate.Kind != kind || !candidate.Route.EndsWith("/*", StringComparison.Ordinal)) continue;
+                var prefix = candidate.Route[..^1];
+                if (!route.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) continue;
+                if (best is null || candidate.Route.Length > best.Route.Length) best = candidate;
+            }
+
+            return best;
+        }
+
+        public bool CanDispatch(string route, WebEndpointKind kind)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(route);
+            return Find(kind, NormalizeRoute(route)) is not null;
         }
 
         public async Task<WebEndpointResponse> DispatchAsync(WebEndpointRequest request, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(request);
-            var key = NormalizeRoute(request.Route);
-            if (!_registrations.TryGetValue(key, out var registration))
+            var route = NormalizeRoute(request.Route);
+            var kind = request.IsWebSocket ? WebEndpointKind.WebSocket : WebEndpointKind.Http;
+            var registration = Find(kind, route);
+            if (registration is null)
             {
-                return WebEndpointResponse.Text(404, "Web endpoint not found.");
-            }
-
-            if (request.IsWebSocket && registration.Kind != WebEndpointKind.WebSocket)
-            {
-                return WebEndpointResponse.Text(426, "WebSocket upgrade required.");
-            }
-
-            if (!request.IsWebSocket && registration.Kind == WebEndpointKind.WebSocket)
-            {
-                return WebEndpointResponse.Text(426, "WebSocket upgrade required.");
+                var other = Find(request.IsWebSocket ? WebEndpointKind.Http : WebEndpointKind.WebSocket, route);
+                return other is null
+                    ? WebEndpointResponse.Text(404, "Web endpoint not found.")
+                    : WebEndpointResponse.Text(426, "WebSocket upgrade required.");
             }
 
             try

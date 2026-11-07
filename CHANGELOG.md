@@ -7,6 +7,12 @@ and this project loosely adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.3.0-beta] - 2026-11-07
+
+### Added
+- Web endpoint routes distinguish HTTP and WebSocket registrations and support longest-prefix matching for adapter assets.
+- Web endpoint requests now retain the query string.
+
 ## [2.2.0-beta] - 2026-11-06
 
 ### Added
@@ -195,4 +201,3 @@ This major version is currently under development; further changes will be added
 
 [0.2.0]: https://github.com/MrRSEV/ioBroker-NewGen/releases/tag/dev-0.2.0
 [0.1.0]: https://github.com/MrRSEV/ioBroker-NewGen/releases/tag/dev-0.1.0
-

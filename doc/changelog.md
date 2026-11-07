@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.0-beta – Legacy Admin-Tab-Routing
+
+- Web-Endpunkte trennen HTTP- und WebSocket-Registrierungen derselben Route
+  und unterstützen längste Präfix-Routen.
+- Query-Strings werden vom Web-Adapter an die Endpoint-Handler weitergereicht.
+
 ## 2.1.1-beta – Fixes
 
 - Adapter-DLLs landen wieder direkt in `Adapters\native` (kein doppelter Pfad im Build).
@@ -153,4 +159,3 @@ beta0.2.0-Stand und die Sprint-Zuordnung.
   finalen Snapshots beim Herunterfahren.
 
 [Release-Tag auf GitHub](https://github.com/MrRSEV/ioBroker-NewGen/releases/tag/dev-0.1.0)
-

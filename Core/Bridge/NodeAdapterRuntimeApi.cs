@@ -88,6 +88,112 @@ namespace ioBroker_NewGen.Core.Bridge
 
         public event EventHandler<NodeAdapterNotificationEventArgs>? NotificationReceived;
 
+        public JsonNode? GetObjectNode(string id)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(id);
+            if (_objects.TryGetValue(id, out var document)) return document?.DeepClone();
+            if (_matrix?.GetObject(id) is not { } matrixObject) return null;
+            return ToJsonNode(new
+            {
+                _id = matrixObject.Id,
+                type = matrixObject.Type,
+                common = new { name = matrixObject.Name },
+                meta = matrixObject.Meta
+            });
+        }
+
+        public IReadOnlyDictionary<string, JsonNode?> GetObjectNodes(string pattern = "*", string? type = null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(pattern);
+            var result = new Dictionary<string, JsonNode?>(StringComparer.Ordinal);
+            foreach (var entry in _objects)
+            {
+                if (!Matches(pattern, entry.Key) ||
+                    (!string.IsNullOrWhiteSpace(type) &&
+                     (entry.Value is not JsonObject obj || !string.Equals(obj["type"]?.ToString(), type, StringComparison.OrdinalIgnoreCase))))
+                {
+                    continue;
+                }
+
+                result[entry.Key] = entry.Value?.DeepClone();
+            }
+
+            if (_matrix is not null)
+            {
+                foreach (var entry in _matrix.GetObjects(pattern))
+                {
+                    if (result.ContainsKey(entry.Key) ||
+                        (!string.IsNullOrWhiteSpace(type) && !string.Equals(entry.Value.Type, type, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        continue;
+                    }
+
+                    result[entry.Key] = ToJsonNode(new
+                    {
+                        _id = entry.Value.Id,
+                        type = entry.Value.Type,
+                        common = new { name = entry.Value.Name },
+                        meta = entry.Value.Meta
+                    });
+                }
+            }
+
+            return result;
+        }
+
+        public IReadOnlyDictionary<string, object?> GetStatePayloads(string pattern = "*")
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(pattern);
+            if (_matrix is null) return new Dictionary<string, object?>(StringComparer.Ordinal);
+            return _matrix.GetStates(pattern)
+                .ToDictionary(entry => entry.Key, entry => (object?)ToStatePayload(entry.Value), StringComparer.Ordinal);
+        }
+
+        public object? GetStatePayload(string id)
+            => _matrix?.GetState(id) is { } state ? ToStatePayload(state) : null;
+
+        public bool SetStateValue(string id, object? value, string user = "admin")
+            => _matrix?.SetState(id, value, user) == true;
+
+        public void SetObjectNode(string id, JsonNode value, bool extend = false)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(id);
+            ArgumentNullException.ThrowIfNull(value);
+
+            var incoming = value.DeepClone() as JsonObject
+                ?? throw new ArgumentException("Objekt muss ein JSON-Objekt sein.", nameof(value));
+            incoming["_id"] = id;
+            JsonNode stored = incoming;
+            if (extend && _objects.TryGetValue(id, out var existing) && existing is JsonObject existingObject)
+            {
+                Merge(existingObject, incoming);
+                stored = existingObject;
+            }
+            else
+            {
+                _objects[id] = stored;
+            }
+
+            if (_matrix is not null)
+            {
+                var matrixObject = ToMatrixObject(id, stored as JsonObject);
+                if (!_matrix.UpdateObject(matrixObject)) _matrix.RegisterObject(matrixObject);
+            }
+            else
+            {
+                PublishObjectChange(id, stored);
+            }
+        }
+
+        public bool DeleteObjectNode(string id)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(id);
+            var removed = _objects.TryRemove(id, out _);
+            removed |= _matrix?.RemoveObject(id) == true;
+            if (removed && _matrix is null) PublishObjectChange(id, null);
+            return removed;
+        }
+
         /// <summary>Verbindet die API mit der TCP-Bridge, ohne die API an deren Listener zu koppeln.</summary>
         internal void AttachTransport(Func<string, BridgeEnvelope, CancellationToken, Task<bool>> sendEnvelope)
         {

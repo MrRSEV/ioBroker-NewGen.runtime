@@ -42,12 +42,12 @@ AssertEx.Equal(
     typeof(BaseEventBus).Assembly.GetName().Version,
     "Die Integration muss gegen RSEV.Utilities 3.0.0.0 laufen.");
 AssertEx.Equal(
-    "beta0.2.0",
+    "beta2.3.0",
     typeof(MainRuntimeContext).Assembly
         .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
         .Cast<System.Reflection.AssemblyInformationalVersionAttribute>()
         .FirstOrDefault()?.InformationalVersion,
-    "Die Build-Kennung muss beta0.2.0 sein.");
+    "Die Build-Kennung muss beta2.3.0 sein.");
 var eventBus = new SystemEventBus();
 var matrix = new SemanticStateMatrix(snapshotPath, eventBus: eventBus);
 var systemBus = new SystemMessageBus();
@@ -100,6 +100,20 @@ AssertEx.True(
     "Alle Sprint-7/9/10-Adapter müssen über lokale Protokoll-Fixtures verifiziert sein.");
 
 var registry = new AdapterRegistry(eventBus);
+var webEndpoints = new WebEndpointRegistry();
+AssertEx.True(
+    webEndpoints.Register("admin.0", "/", WebEndpointKind.Http, static (_, _) => Task.FromResult(WebEndpointResponse.Text(200, "admin"))),
+    "HTTP-Route muss registrierbar sein.");
+AssertEx.True(
+    webEndpoints.Register("socket.0", "/", WebEndpointKind.WebSocket, static (_, _) => Task.FromResult(new WebEndpointResponse())),
+    "WebSocket darf dieselbe Route wie HTTP registrieren.");
+AssertEx.True(
+    webEndpoints.Register("admin.0", "/adapter/*", WebEndpointKind.Http, static (_, _) => Task.FromResult(WebEndpointResponse.Text(200, "adapter"))),
+    "Präfix-Route muss registrierbar sein.");
+AssertEx.True(webEndpoints.CanDispatch("/", WebEndpointKind.Http), "Exakte HTTP-Route muss erkannt werden.");
+AssertEx.True(webEndpoints.CanDispatch("/", WebEndpointKind.WebSocket), "Exakte WebSocket-Route muss erkannt werden.");
+AssertEx.True(webEndpoints.CanDispatch("/adapter/javascript/tab.html", WebEndpointKind.Http), "Präfix-Route muss erkannt werden.");
+AssertEx.True(!webEndpoints.CanDispatch("/adapter/javascript/tab.html", WebEndpointKind.WebSocket), "HTTP-Präfix darf keine WebSocket-Route vortäuschen.");
 var first = registry.Register("mqtt", AdapterType.IoBroker);
 var second = registry.Register("mqtt", AdapterType.IoBroker);
 AssertEx.Equal("mqtt.0", first.Id, "Erste Adapter-ID muss mit .0 beginnen.");

@@ -79,6 +79,8 @@ namespace ioBroker_NewGen.Core.Bridge
             return result.OrderBy(info => info.Name, StringComparer.Ordinal).ToList();
         }
 
+        public NodeAdapterRuntimeApi Api => _node.Api;
+
         public bool IsInstance(string id) => ReadInstances().Contains(id, StringComparer.OrdinalIgnoreCase);
 
         public bool IsInstalled(string name) => FindPackage(name) is not null;
