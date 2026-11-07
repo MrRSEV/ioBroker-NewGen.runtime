@@ -32,8 +32,9 @@ class StateApi {
       frame: 'StateUpdate',
       kind: FrameKind.StateUpdate,
       address: fullId,
-      payload: next,
-      valueType: typeOfValue(next.val)
+      payload: next.val === undefined ? null : next.val,
+      valueType: typeof next.val === 'string' ? 'json' : typeOfValue(next.val),
+      metadata: { ack: next.ack === true }
     });
     return fullId;
   }

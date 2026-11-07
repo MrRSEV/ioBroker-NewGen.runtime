@@ -7,6 +7,16 @@ and this project loosely adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.4.0-beta] - 2026-11-07
+
+### Added
+- Bridge: Adapter-Logs (`log`-Frames) werden ins Runtime-Log (`latest.log`) weitergeleitet.
+- Legacy-Objekt-API: `getDevices`, `getChannels`, `getStatesOf` und `setForeignObjectNotExists` (jeweils Async und Callback); Objekt-Zeilen enthalten `doc`.
+
+### Fixed
+- Legacy-State-Schreibzugriffe (`setState`/`setForeignState`) senden den nackten Wert samt `valueType` und `ack` statt des gesamten State-Objekts; Werte erreichen dadurch die Matrix.
+- Die Runtime merkt sich `ack` pro State und gibt es an `stateChange`-Subscriber weiter. Schreibzugriffe aus dem Admin setzen `ack=false`, sodass Adapter (z. B. `wled`) darauf reagieren.
+
 ## [2.3.0-beta] - 2026-11-07
 
 ### Added

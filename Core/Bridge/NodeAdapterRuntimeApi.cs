@@ -50,6 +50,7 @@ namespace ioBroker_NewGen.Core.Bridge
         private readonly IWebEndpointRegistry? _webEndpointRegistry;
         private readonly string _storageRoot;
         private readonly object _subscriptionLock = new();
+        private readonly ConcurrentDictionary<string, TaskCompletionSource<JsonNode?>> _pendingReplies = new(StringComparer.Ordinal);
         private readonly List<AdapterSubscription> _subscriptions = new();
         private readonly ConcurrentDictionary<string, JsonNode?> _objects = new(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, TaskCompletionSource<BridgeWebResponse>> _webRequests = new(StringComparer.Ordinal);
@@ -76,6 +77,7 @@ namespace ioBroker_NewGen.Core.Bridge
             // webserver-unabhängige Registry.
             _webEndpointRegistry = webEndpointRegistry;
             _storageRoot = Path.GetFullPath(storageRoot ?? Path.Combine(AppContext.BaseDirectory, "data", "adapter-storage"));
+            LoadObjects();
 
             if (_matrix is not null)
             {
@@ -87,6 +89,46 @@ namespace ioBroker_NewGen.Core.Bridge
         public NodeAdapterRuntimeApiContract Contract => new(Objective, Features, WebIntegration);
 
         public event EventHandler<NodeAdapterNotificationEventArgs>? NotificationReceived;
+
+        /// <summary>Wird bei jeder Zustands-/Objektänderung ausgelöst (z. B. für Browser-Clients des Admins).</summary>
+        public event Action<string, object?>? StateChangedBroadcast;
+        public event Action<string, JsonNode?>? ObjectChangedBroadcast;
+
+        private string ObjectsFile => Path.Combine(_storageRoot, "_objects.json");
+        private readonly object _objectsFileLock = new();
+
+        private void LoadObjects()
+        {
+            try
+            {
+                if (!File.Exists(ObjectsFile) || JsonNode.Parse(File.ReadAllText(ObjectsFile)) is not JsonObject saved) return;
+                foreach (var entry in saved) _objects[entry.Key] = entry.Value?.DeepClone();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning($"[NodeRuntimeApi] Objekte konnten nicht geladen werden: {ex.Message}");
+            }
+        }
+
+        private void PersistObjects()
+        {
+            try
+            {
+                lock (_objectsFileLock)
+                {
+                    var snapshot = new JsonObject();
+                    foreach (var entry in _objects) snapshot[entry.Key] = entry.Value?.DeepClone();
+                    Directory.CreateDirectory(_storageRoot);
+                    var temp = ObjectsFile + ".tmp";
+                    File.WriteAllText(temp, snapshot.ToJsonString());
+                    File.Move(temp, ObjectsFile, true);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning($"[NodeRuntimeApi] Objekte konnten nicht gespeichert werden: {ex.Message}");
+            }
+        }
 
         public JsonNode? GetObjectNode(string id)
         {
@@ -133,6 +175,7 @@ namespace ioBroker_NewGen.Core.Bridge
                         _id = entry.Value.Id,
                         type = entry.Value.Type,
                         common = new { name = entry.Value.Name },
+                        native = new { },
                         meta = entry.Value.Meta
                     });
                 }
@@ -146,14 +189,17 @@ namespace ioBroker_NewGen.Core.Bridge
             ArgumentException.ThrowIfNullOrWhiteSpace(pattern);
             if (_matrix is null) return new Dictionary<string, object?>(StringComparer.Ordinal);
             return _matrix.GetStates(pattern)
-                .ToDictionary(entry => entry.Key, entry => (object?)ToStatePayload(entry.Value), StringComparer.Ordinal);
+                .ToDictionary(entry => entry.Key, entry => (object?)ToStatePayload(entry.Key, entry.Value), StringComparer.Ordinal);
         }
 
         public object? GetStatePayload(string id)
-            => _matrix?.GetState(id) is { } state ? ToStatePayload(state) : null;
+            => _matrix?.GetState(id) is { } state ? ToStatePayload(id, state) : null;
 
         public bool SetStateValue(string id, object? value, string user = "admin")
-            => _matrix?.SetState(id, value, user) == true;
+        {
+            _stateAcks[id] = false;
+            return _matrix?.SetState(id, value, user) == true;
+        }
 
         public void SetObjectNode(string id, JsonNode value, bool extend = false)
         {
@@ -173,7 +219,7 @@ namespace ioBroker_NewGen.Core.Bridge
             {
                 _objects[id] = stored;
             }
-
+            PersistObjects();
             if (_matrix is not null)
             {
                 var matrixObject = ToMatrixObject(id, stored as JsonObject);
@@ -189,6 +235,7 @@ namespace ioBroker_NewGen.Core.Bridge
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(id);
             var removed = _objects.TryRemove(id, out _);
+            if (removed) PersistObjects();
             removed |= _matrix?.RemoveObject(id) == true;
             if (removed && _matrix is null) PublishObjectChange(id, null);
             return removed;
@@ -231,6 +278,47 @@ namespace ioBroker_NewGen.Core.Bridge
                 BusFrameKind.Command,
                 metadata,
                 cancellationToken);
+        }
+
+        /// <summary>Sendet eine Message und wartet auf die Antwort des Zieladapters (sendTo mit Callback).</summary>
+        public async Task<(bool Delivered, JsonNode? Reply)> SendToWithReplyAsync(
+            string targetAdapterId,
+            string command,
+            object? message,
+            string fromAdapterId,
+            TimeSpan timeout,
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(targetAdapterId)) throw new ArgumentException("Zieladapter darf nicht leer sein.", nameof(targetAdapterId));
+            if (string.IsNullOrWhiteSpace(command)) throw new ArgumentException("Command darf nicht leer sein.", nameof(command));
+
+            var correlationId = Guid.NewGuid().ToString("N");
+            var waiter = new TaskCompletionSource<JsonNode?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _pendingReplies[correlationId] = waiter;
+            try
+            {
+                var metadata = new Dictionary<string, string>
+                {
+                    ["frame"] = "Message",
+                    ["command"] = command,
+                    ["from"] = fromAdapterId,
+                    ["expectReply"] = "true",
+                    ["correlationId"] = correlationId
+                };
+                var sent = await SendPayloadAsync(NormalizeAdapterId(targetAdapterId), targetAdapterId, message, BusFrameKind.Command, metadata, cancellationToken);
+                if (!sent) return (false, null);
+
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeoutCts.CancelAfter(timeout);
+                using (timeoutCts.Token.Register(() => waiter.TrySetResult(null)))
+                {
+                    return (true, await waiter.Task);
+                }
+            }
+            finally
+            {
+                _pendingReplies.TryRemove(correlationId, out _);
+            }
         }
 
         public Task<bool> SendToHostAsync(
@@ -406,6 +494,12 @@ namespace ioBroker_NewGen.Core.Bridge
                 return true;
             }
 
+            if (string.Equals(frame, "StateUpdate", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(envelope.Address))
+            {
+                _stateAcks[envelope.Address] = !metadata.TryGetValue("ack", out var ackText) || !string.Equals(ackText, "false", StringComparison.OrdinalIgnoreCase);
+                return false;
+            }
+
             switch (frame.ToLowerInvariant())
             {
                 case "statequery":
@@ -452,6 +546,9 @@ namespace ioBroker_NewGen.Core.Bridge
                         await ReplyAsync(sourceAdapterId, envelope, frame, new { success = false, error = "file access denied" }, cancellationToken);
                     }
                     return true;
+                case "log":
+                    ForwardAdapterLog(sourceAdapterId, envelope);
+                    return true;
                 case "webendpoint":
                     await HandleWebEndpointAsync(sourceAdapterId, envelope, metadata, cancellationToken);
                     return true;
@@ -475,10 +572,10 @@ namespace ioBroker_NewGen.Core.Bridge
             var pattern = string.IsNullOrWhiteSpace(address) ? "*" : address;
             if (metadata.ContainsKey("multi"))
             {
-                return _matrix.GetStates(pattern).ToDictionary(entry => entry.Key, entry => (object?)ToStatePayload(entry.Value), StringComparer.Ordinal);
+                return _matrix.GetStates(pattern).ToDictionary(entry => entry.Key, entry => (object?)ToStatePayload(entry.Key, entry.Value), StringComparer.Ordinal);
             }
 
-            return _matrix.GetState(pattern) is { } state ? ToStatePayload(state) : null!;
+            return _matrix.GetState(pattern) is { } state ? ToStatePayload(pattern, state) : null!;
         }
 
         private object QueryObjects(string? address, IReadOnlyDictionary<string, string> metadata)
@@ -525,6 +622,7 @@ namespace ioBroker_NewGen.Core.Bridge
                 stored = node;
                 _objects[address] = stored;
             }
+            PersistObjects();
 
             var matrixObject = ToMatrixObject(address, stored as JsonObject);
             if (_matrix is not null)
@@ -547,6 +645,7 @@ namespace ioBroker_NewGen.Core.Bridge
             var address = request.Address;
             if (string.IsNullOrWhiteSpace(address)) return;
             _objects.TryRemove(address, out _);
+            PersistObjects();
             _matrix?.RemoveObject(address);
             if (_matrix is null)
             {
@@ -557,6 +656,13 @@ namespace ioBroker_NewGen.Core.Bridge
 
         private async Task HandleMessageAsync(string sourceAdapterId, BridgeEnvelope request, string frame, IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken)
         {
+            if (metadata.TryGetValue("reply", out var isReply) && string.Equals(isReply, "true", StringComparison.OrdinalIgnoreCase) &&
+                metadata.TryGetValue("correlationId", out var replyId) && _pendingReplies.TryGetValue(replyId, out var waiter))
+            {
+                waiter.TrySetResult(ToJsonNode(DecodePayload(request)));
+                return;
+            }
+
             var target = NormalizeAdapterId(request.Address);
             var outgoing = Clone(request);
             outgoing.AdapterId = sourceAdapterId;
@@ -726,6 +832,7 @@ namespace ioBroker_NewGen.Core.Bridge
 
         private void OnStateChanged(StateChangedEventArgs changed)
         {
+            StateChangedBroadcast?.Invoke(changed.StateId, ToStatePayload(changed.StateId, changed.State));
             AdapterSubscription[] subscriptions;
             lock (_subscriptionLock)
             {
@@ -737,7 +844,7 @@ namespace ioBroker_NewGen.Core.Bridge
                 _ = SendPayloadAsync(
                     subscription.AdapterId,
                     changed.StateId,
-                    ToStatePayload(changed.State),
+                    ToStatePayload(changed.StateId, changed.State),
                     BusFrameKind.StateUpdate,
                     new Dictionary<string, string> { ["frame"] = "StateChange" },
                     CancellationToken.None);
@@ -746,6 +853,7 @@ namespace ioBroker_NewGen.Core.Bridge
 
         private void PublishObjectChange(string id, JsonNode? value)
         {
+            ObjectChangedBroadcast?.Invoke(id, value?.DeepClone());
             AdapterSubscription[] subscriptions;
             lock (_subscriptionLock)
             {
@@ -843,14 +951,33 @@ namespace ioBroker_NewGen.Core.Bridge
             return adapterId.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ? adapterId[prefix.Length..] : adapterId;
         }
 
-        private static object ToStatePayload(StateNode state) => new Dictionary<string, object?>
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _stateAcks = new(StringComparer.Ordinal);
+
+        private object ToStatePayload(string stateId, StateNode state) => new Dictionary<string, object?>
         {
             ["val"] = state.Value,
             ["ts"] = state.Timestamp,
             ["lc"] = state.Timestamp,
-            ["ack"] = true,
+            ["ack"] = _stateAcks.TryGetValue(stateId, out var ack) ? ack : true,
             ["from"] = state.LastWrittenBy
         };
+
+        private void ForwardAdapterLog(string sourceAdapterId, BridgeEnvelope envelope)
+        {
+            var payload = DecodePayload(envelope) as JsonElement?;
+            var level = "info";
+            var message = string.Empty;
+            if (payload is { ValueKind: JsonValueKind.Object } obj)
+            {
+                if (obj.TryGetProperty("level", out var l) && l.ValueKind == JsonValueKind.String) level = l.GetString() ?? level;
+                if (obj.TryGetProperty("message", out var m)) message = m.ValueKind == JsonValueKind.String ? m.GetString() ?? string.Empty : m.GetRawText();
+            }
+
+            var line = $"[{sourceAdapterId}] {message}";
+            if (level == "error") _logger.LogError(line);
+            else if (level == "warn") _logger.LogWarning(line);
+            else if (level == "info") _logger.LogInfo(line);
+        }
 
         private static object? DecodePayload(BridgeEnvelope envelope)
         {

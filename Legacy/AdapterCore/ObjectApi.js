@@ -113,17 +113,44 @@ class ObjectApi {
     const startkey = (params && params.startkey) || '';
     const endkey = (params && params.endkey) || '\u9999';
     const all = await this._readMany('*');
-    const rows = Object.keys(all).filter(id => id >= startkey && id <= endkey).sort().map(id => ({ id, value: all[id] }));
+    const rows = Object.keys(all).filter(id => id >= startkey && id <= endkey).sort().map(id => {
+      const value = all[id] && typeof all[id] === 'object' && !all[id]._id ? { ...all[id], _id: id } : all[id];
+      return { id, value, doc: value };
+    });
     return { rows };
   }
   async getObjectViewAsync(design, search, params) {
-    const type = search === 'state' || search === 'channel' || search === 'device' || search === 'folder' || search === 'adapter' || search === 'instance' ||
+    const type = design === 'script' ? 'script' : search === 'state' || search === 'channel' || search === 'device' || search === 'folder' || search === 'adapter' || search === 'instance' ||
       search === 'host' || search === 'config' || search === 'user' || search === 'group' || search === 'enum' || search === 'script' ? search : undefined;
     const startkey = (params && params.startkey) || '';
     const endkey = (params && params.endkey) || '\u9999';
     const all = await this._readMany('*', type);
-    const rows = Object.keys(all).filter(id => id >= startkey && id <= endkey).sort().map(id => ({ id, value: all[id] }));
+    const rows = Object.keys(all).filter(id => id >= startkey && id <= endkey).sort().map(id => {
+      const value = all[id] && typeof all[id] === 'object' && !all[id]._id ? { ...all[id], _id: id } : all[id];
+      return { id, value, doc: value };
+    });
     return { rows };
+  }
+  async _ownByType(type) {
+    const all = await this._readMany(`${this.core.namespace}.*`, type);
+    return Object.keys(all).sort().map(id => (all[id] && typeof all[id] === 'object' && !all[id]._id ? { ...all[id], _id: id } : all[id]));
+  }
+  getDevicesAsync() { return this._ownByType('device'); }
+  async getChannelsAsync(parentDevice) {
+    const channels = await this._ownByType('channel');
+    if (!parentDevice) return channels;
+    const prefix = `${this._own(parentDevice)}.`;
+    return channels.filter(channel => channel._id.startsWith(prefix));
+  }
+  async getStatesOfAsync(parentDevice, parentChannel) {
+    const states = await this._ownByType('state');
+    const prefix = parentChannel ? `${this._own(parentDevice ? `${parentDevice}.${parentChannel}` : parentChannel)}.` : parentDevice ? `${this._own(parentDevice)}.` : '';
+    return prefix ? states.filter(state => state._id.startsWith(prefix)) : states;
+  }
+  async setForeignObjectNotExistsAsync(id, obj) {
+    const fullId = requireId(id);
+    if (await this._read(fullId)) return undefined;
+    return this._create(fullId, obj, false);
   }
   extendObjectAsync(id, obj) { return this._extend(this._own(id), obj); }
   extendForeignObjectAsync(id, obj) { return this._extend(requireId(id), obj); }
@@ -137,6 +164,10 @@ class ObjectApi {
   getForeignObjects(...args) { return withCallback(args, a => this.getForeignObjectsAsync(...a)); }
   getObjectList(...args) { return withCallback(args, a => this.getObjectListAsync(...a)); }
   getObjectView(...args) { return withCallback(args, a => this.getObjectViewAsync(...a)); }
+  getDevices(...args) { return withCallback(args, a => this.getDevicesAsync(...a)); }
+  getChannels(...args) { return withCallback(args, a => this.getChannelsAsync(...a)); }
+  getStatesOf(...args) { return withCallback(args, a => this.getStatesOfAsync(...a)); }
+  setForeignObjectNotExists(...args) { return withCallback(args, a => this.setForeignObjectNotExistsAsync(...a)); }
 
   setObject(...args) { return withCallback(args, a => this.setObjectAsync(...a)); }
   setObjectNotExists(...args) { return withCallback(args, a => this.setObjectNotExistsAsync(...a)); }
