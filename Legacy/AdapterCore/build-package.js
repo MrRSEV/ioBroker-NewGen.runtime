@@ -14,7 +14,7 @@ fs.rmSync(target, { recursive: true, force: true });
 fs.mkdirSync(path.join(target, 'vendor'), { recursive: true });
 
 const files = [
-  'index.js', 'Adapter.js', 'StateApi.js', 'ObjectApi.js', 'MessageApi.js', 'CompatibilityApi.js', 'LoggerApi.js',
+  'index.js', 'Adapter.js', 'AdapterCompatibilityWrapper.js', 'StateApi.js', 'ObjectApi.js', 'MessageApi.js', 'CompatibilityApi.js', 'LoggerApi.js',
   'SubscriptionManager.js', 'BridgeStateSynchronizer.js', 'util.js', 'crypto.js', 'commonTools.js', 'credentials.js',
   'exitCodes.js', 'i18n.js', 'TokenRefresher.js', 'tools.js', 'package.json', 'README.md'
 ];

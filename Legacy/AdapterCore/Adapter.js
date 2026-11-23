@@ -10,6 +10,7 @@ const { ObjectApi } = require('./ObjectApi');
 const { MessageApi } = require('./MessageApi');
 const { LoggerApi } = require('./LoggerApi');
 const { CompatibilityApi } = require('./CompatibilityApi');
+const { ensureAdapterCompatibility } = require('./AdapterCompatibilityWrapper');
 const { decrypt, encrypt, DEFAULT_SECRET } = require('./crypto');
 
 const UNLOAD_TIMEOUT_MS = 5000;
@@ -98,6 +99,7 @@ class Adapter extends EventEmitter {
     this._objectApi = new ObjectApi(core);
     this._messageApi = new MessageApi(core);
     this._compatibilityApi = new CompatibilityApi(core);
+    ensureAdapterCompatibility(this);
 
     for (const event of ['ready', 'stateChange', 'objectChange', 'message', 'unload']) {
       if (typeof options[event] === 'function') this.on(event, options[event]);

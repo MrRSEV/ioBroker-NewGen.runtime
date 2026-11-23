@@ -26,7 +26,7 @@ namespace ioBroker_NewGen.Controllers
         private static readonly Lazy<MainRuntimeContext> _instance = new(() => new MainRuntimeContext());
 
         /// <summary>
-        /// Die einzige Instanz des MainRuntimeContext f�r den gesamten Prozess.
+        /// Die einzige Instanz des MainRuntimeContext für den gesamten Prozess.
         /// </summary>
         public static MainRuntimeContext Instance => _instance.Value;
 
@@ -60,7 +60,7 @@ namespace ioBroker_NewGen.Controllers
         public IWebEndpointRegistry WebEndpoints { get; private set; } = null!;
 
         /// <summary>
-        /// Entscheidet, ob Frames intern (Custom-Adapter) oder �ber die
+        /// Entscheidet, ob Frames intern (Custom-Adapter) oder über die
         /// TCP-Bridge (ioBroker-Legacy-Adapter) geroutet werden.
         /// </summary>
         public AdapterRouter AdapterRouter { get; private set; } = null!;

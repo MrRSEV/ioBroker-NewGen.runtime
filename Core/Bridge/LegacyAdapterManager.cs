@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -24,8 +25,8 @@ namespace ioBroker_NewGen.Core.Bridge
     {
         public const string InstancesKey = "adapter.legacyInstances";
 
-        private const long MaxUncompressedBytes = 2L * 1024 * 1024 * 1024;
-        private const int MaxEntries = 200_000;
+        private const long MaxUncompressedBytes = 10L * 1024 * 1024 * 1024;
+        private const int MaxEntries = 1_000_000;
         private static readonly Regex InstanceIdPattern = new(@"^(?<name>[a-z0-9][a-z0-9_-]*)\.(?<index>\d+)$", RegexOptions.Compiled);
 
         private readonly NodeAdapterRuntime _node;
@@ -102,20 +103,32 @@ namespace ioBroker_NewGen.Core.Bridge
 
                 var root = FindPackageRoot(staging)
                     ?? throw new InvalidDataException("Im ZIP wurde keine io-package.json gefunden – kein ioBroker-Adapter.");
-                var info = LegacyAdapterPackage.Read(root)
+                var packageInfo = LegacyAdapterPackage.Read(root)
                     ?? throw new InvalidDataException("io-package.json ist ungültig (common.name fehlt oder enthält unzulässige Zeichen).");
-                if (string.Equals(info.Name, "admin", StringComparison.Ordinal))
+                if (string.Equals(packageInfo.Name, "admin", StringComparison.Ordinal))
                 {
                     throw new InvalidDataException("Der Name 'admin' ist reserviert.");
                 }
 
+                if (!File.Exists(Path.Combine(root, "package.json")))
+                {
+                    throw new InvalidDataException("Im Adapterverzeichnis fehlt package.json – npm install kann nicht ausgeführt werden.");
+                }
+
+                progress?.Invoke($"Adapter erkannt: {packageInfo.Name} {packageInfo.Version}");
+                progress?.Invoke("Führe npm install aus...");
+                await RunNpmCommandAsync(root, new[] { "install" }, cancellationToken, progress);
+                progress?.Invoke("Führe npm run build aus...");
+                await RunNpmCommandAsync(root, new[] { "run", "build" }, cancellationToken, progress);
+
+                var info = LegacyAdapterPackage.Read(root)
+                    ?? throw new InvalidDataException("io-package.json ist nach npm install/npm run build nicht mehr gültig.");
                 if (string.IsNullOrEmpty(info.Entry))
                 {
                     throw new InvalidDataException(
-                        "Die Startdatei des Adapters fehlt (package.json \"main\", z. B. build/main.js). Der Adapter muss gebaut sein (npm run build).");
+                        "Die Startdatei des Adapters fehlt (package.json \"main\", z. B. build/main.js). npm run build hat keine Startdatei erzeugt.");
                 }
 
-                progress?.Invoke($"Adapter erkannt: {info.Name} {info.Version}");
                 var warnings = new List<string>();
                 if (!Directory.Exists(Path.Combine(root, "node_modules")) && HasDependencies(root))
                 {
@@ -492,6 +505,104 @@ namespace ioBroker_NewGen.Core.Bridge
             }
         }
 
+        private static async Task RunNpmCommandAsync(
+            string workingDirectory,
+            IReadOnlyList<string> arguments,
+            CancellationToken cancellationToken,
+            Action<string>? progress)
+        {
+            var displayCommand = "npm " + string.Join(" ", arguments);
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = OperatingSystem.IsWindows() ? "cmd.exe" : "npm",
+                WorkingDirectory = workingDirectory,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+
+            if (OperatingSystem.IsWindows())
+            {
+                startInfo.ArgumentList.Add("/d");
+                startInfo.ArgumentList.Add("/c");
+                startInfo.ArgumentList.Add(displayCommand);
+            }
+            else
+            {
+                foreach (var argument in arguments)
+                {
+                    startInfo.ArgumentList.Add(argument);
+                }
+            }
+
+            using var process = new Process { StartInfo = startInfo };
+            try
+            {
+                if (!process.Start())
+                {
+                    throw new InvalidOperationException($"{displayCommand} konnte nicht gestartet werden.");
+                }
+            }
+            catch (System.ComponentModel.Win32Exception exception)
+            {
+                throw new InvalidOperationException(
+                    $"{displayCommand} konnte nicht gestartet werden. Ist Node.js/npm installiert?",
+                    exception);
+            }
+
+            var outputTask = ForwardProcessOutputAsync(process.StandardOutput, displayCommand, progress);
+            var errorTask = ForwardProcessOutputAsync(process.StandardError, displayCommand, progress);
+            try
+            {
+                await process.WaitForExitAsync(cancellationToken);
+                await Task.WhenAll(outputTask, errorTask);
+            }
+            catch
+            {
+                try
+                {
+                    if (!process.HasExited)
+                    {
+                        process.Kill(entireProcessTree: true);
+                    }
+                }
+                catch (InvalidOperationException)
+                {
+                }
+                catch (System.ComponentModel.Win32Exception)
+                {
+                }
+
+                try
+                {
+                    await process.WaitForExitAsync();
+                    await Task.WhenAll(outputTask, errorTask);
+                }
+                catch
+                {
+                }
+
+                throw;
+            }
+
+            if (process.ExitCode != 0)
+            {
+                throw new InvalidOperationException($"{displayCommand} ist mit Exitcode {process.ExitCode} fehlgeschlagen.");
+            }
+        }
+
+        private static async Task ForwardProcessOutputAsync(
+            StreamReader reader,
+            string command,
+            Action<string>? progress)
+        {
+            while (await reader.ReadLineAsync() is { } line)
+            {
+                progress?.Invoke($"{command}: {line}");
+            }
+        }
+
         // Virenscanner/Indexer/OneDrive sperren frisch entpackte Ordner kurzzeitig.
         private static void MoveWithRetry(string source, string target)
         {
@@ -543,11 +654,12 @@ namespace ioBroker_NewGen.Core.Bridge
                     continue;
                 }
 
-                total += entry.Length;
-                if (total > MaxUncompressedBytes)
+                if (entry.Length > MaxUncompressedBytes - total)
                 {
                     throw new InvalidDataException("Das ZIP ist entpackt zu groß.");
                 }
+
+                total += entry.Length;
 
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                 entry.ExtractToFile(target, overwrite: true);

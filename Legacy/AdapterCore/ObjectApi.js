@@ -38,6 +38,17 @@ class ObjectApi {
     return reply.payload;
   }
 
+  async _readByIds(ids) {
+    if (!Array.isArray(ids)) throw new TypeError('object ids must be an array');
+    const result = {};
+    const objects = await Promise.all(ids.map(id => this.getForeignObjectAsync(id)));
+    ids.forEach((id, index) => {
+      requireId(id);
+      result[id] = objects[index];
+    });
+    return result;
+  }
+
   async _readMany(pattern, type) {
     const { sync } = this.core;
     const metadata = { multi: 'true' };
@@ -108,6 +119,8 @@ class ObjectApi {
   setForeignObjectAsync(id, obj) { return this._create(requireId(id), obj, false); }
   getObjectAsync(id) { return this._read(this._own(id)); }
   getForeignObjectAsync(id) { return this._read(requireId(id)); }
+  getObjectByIdAsync(id) { return this.getForeignObjectAsync(id); }
+  getObjectsByIdAsync(ids) { return this._readByIds(ids); }
   getForeignObjectsAsync(pattern, type) { return this._readMany(requireId(pattern), typeof type === 'string' ? type : undefined); }
   async getObjectListAsync(params) {
     const startkey = (params && params.startkey) || '';
@@ -174,6 +187,8 @@ class ObjectApi {
   setForeignObject(...args) { return withCallback(args, a => this.setForeignObjectAsync(...a)); }
   getObject(...args) { return withCallback(args, a => this.getObjectAsync(...a)); }
   getForeignObject(...args) { return withCallback(args, a => this.getForeignObjectAsync(...a)); }
+  getObjectById(...args) { return withCallback(args, a => this.getObjectByIdAsync(...a)); }
+  getObjectsById(...args) { return withCallback(args, a => this.getObjectsByIdAsync(...a)); }
   extendObject(...args) { return withCallback(args, a => this.extendObjectAsync(...a)); }
   extendForeignObject(...args) { return withCallback(args, a => this.extendForeignObjectAsync(...a)); }
   delObject(...args) { return withCallback(args, a => this.delObjectAsync(...a)); }

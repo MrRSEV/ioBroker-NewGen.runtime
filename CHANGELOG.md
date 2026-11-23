@@ -7,6 +7,17 @@ and this project loosely adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Legacy-AdapterCore: Ergänzt einen zentralen js-controller-/adapter-core-Kompatibilitätswrapper mit sicher gebundenen Logger-Methoden, Foreign-/Async-Aliassen und Fallbacks für Datei-, Passwort- und Löschfunktionen. Dadurch startet der moderne Legacy-Adapter `iot` ohne `undefined.bind` im Remote-Konstruktor.
+- Legacy-AdapterCore: `subscribeForeignStatesAsync` und `unsubscribeForeignStatesAsync` akzeptieren jetzt auch ID-Arrays wie der moderne adapter-core; dadurch beendet Alexa-Geräte V3 die Gerätesammlung korrekt.
+- Legacy-AdapterCore/Admin-Socket: Ergänzt `getObjectById`/`getObjectsById`; `getObjects` akzeptiert jetzt auch ID-Arrays und liefert das erwartete ID-zu-Objekt-Mapping für moderne Admin-Tabs wie Alexa-Geräte v3.
+- Legacy-iot/Admin: `browse3` liefert bei Fehlern oder einer hängenden Alexa-V3-Gerätesammlung jetzt eine kontrollierte Antwort statt eines endlosen Ladebildschirms.
+- Legacy-Admin-Socket: State-Schreibzugriffe können den übergebenen `ack`-Wert übernehmen, damit Bestätigungszustände aus Legacy-Adapter-Konfigurationsseiten korrekt gespeichert werden.
+
+### Changed
+- Der Legacy-Adapter-ZIP-Import erlaubt jetzt bis zu 10 GiB entpackte Daten und 1.000.000 ZIP-Einträge; die Größenprüfung ist überlaufsicher.
+- Nach dem Entpacken führt der Import im Adapterverzeichnis automatisch `npm install` und anschließend `npm run build` aus. Ausgaben und Fehler werden im Admin-Task-Log angezeigt.
+
 ## [2.4.0-beta] - 2026-11-07
 
 ### Added

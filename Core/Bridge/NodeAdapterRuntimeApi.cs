@@ -196,8 +196,11 @@ namespace ioBroker_NewGen.Core.Bridge
             => _matrix?.GetState(id) is { } state ? ToStatePayload(id, state) : null;
 
         public bool SetStateValue(string id, object? value, string user = "admin")
+            => SetStateValue(id, value, false, user);
+
+        public bool SetStateValue(string id, object? value, bool ack, string user = "admin")
         {
-            _stateAcks[id] = false;
+            _stateAcks[id] = ack;
             return _matrix?.SetState(id, value, user) == true;
         }
 

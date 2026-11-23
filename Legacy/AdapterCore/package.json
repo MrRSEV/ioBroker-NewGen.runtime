@@ -1,6 +1,6 @@
 {
   "name": "@iobroker/adapter-core",
-  "version": "3.4.3",
+  "version": "3.4.5",
   "description": "Drop-in-Ersatz für @iobroker/adapter-core ohne js-controller (ioBroker-NewGen TCP-Bridge)",
   "main": "index.js",
   "exports": {

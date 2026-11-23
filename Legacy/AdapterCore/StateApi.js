@@ -98,8 +98,18 @@ class StateApi {
   getForeignStatesAsync(pattern) { return this._readMany(requireId(pattern)); }
   subscribeStatesAsync(pattern) { return this._subscribe(qualify(this.core.namespace, pattern)); }
   unsubscribeStatesAsync(pattern) { return this._unsubscribe(qualify(this.core.namespace, pattern)); }
-  subscribeForeignStatesAsync(pattern) { return this._subscribe(requireId(pattern)); }
-  unsubscribeForeignStatesAsync(pattern) { return this._unsubscribe(requireId(pattern)); }
+  subscribeForeignStatesAsync(pattern) {
+    if (Array.isArray(pattern)) {
+      return Promise.all(pattern.map(item => this._subscribe(requireId(item)))).then(() => undefined);
+    }
+    return this._subscribe(requireId(pattern));
+  }
+  unsubscribeForeignStatesAsync(pattern) {
+    if (Array.isArray(pattern)) {
+      return Promise.all(pattern.map(item => this._unsubscribe(requireId(item)))).then(() => undefined);
+    }
+    return this._unsubscribe(requireId(pattern));
+  }
 
   setState(...args) { return withCallback(args, a => this.setStateAsync(...a)); }
   setStateChanged(...args) { return withCallback(args, a => this.setStateChangedAsync(...a)); }

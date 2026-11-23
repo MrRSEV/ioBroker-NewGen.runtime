@@ -179,12 +179,29 @@ test('subscribeStates produces deduplicated stateChange events', async () => {
   await teardown();
 });
 
+test('foreign state subscriptions accept arrays like modern adapter-core', async () => {
+  const { bridge, adapter, teardown } = await setup();
+  await adapter.subscribeForeignStatesAsync(['other.0.a', 'other.0.b']);
+  await until(() => bridge.find('Subscribe', 'other.0.a').length === 1 && bridge.find('Subscribe', 'other.0.b').length === 1);
+  await adapter.unsubscribeForeignStatesAsync(['other.0.a', 'other.0.b']);
+  await until(() => bridge.find('Unsubscribe', 'other.0.a').length === 1 && bridge.find('Unsubscribe', 'other.0.b').length === 1);
+  await teardown();
+});
+
 test('objects: create, extend, query, delete and objectChange', async () => {
   const { bridge, adapter, teardown } = await setup();
   await adapter.setObjectAsync('dev', { type: 'device', common: { name: 'x' }, native: {} });
   await adapter.extendObjectAsync('dev', { common: { role: 'r' } });
   bridge.objects.set('demo.0.dev', { _id: 'demo.0.dev', type: 'device' });
   assert.strictEqual((await adapter.getObjectAsync('dev'))._id, 'demo.0.dev');
+  assert.strictEqual((await adapter.getObjectByIdAsync('demo.0.dev')).type, 'device');
+  const objectsById = await adapter.getObjectsByIdAsync(['demo.0.dev', 'demo.0.missing']);
+  assert.strictEqual(objectsById['demo.0.dev'].type, 'device');
+  assert.strictEqual(objectsById['demo.0.missing'], null);
+  const callbackObject = await new Promise((resolve, reject) =>
+    adapter.getObjectById('demo.0.dev', (error, object) => (error ? reject(error) : resolve(object))),
+  );
+  assert.strictEqual(callbackObject._id, 'demo.0.dev');
   assert.strictEqual(await adapter.getForeignObjectAsync('nope.0.x'), null);
   await adapter.delObjectAsync('dev');
   await until(() => bridge.find('ObjectDelete').length === 1);
@@ -251,6 +268,23 @@ test('logger forwards to bridge and falls back to console', async () => {
     console.log = original;
   }
   assert.ok(lines.some(line => line.includes('offline')));
+});
+
+test('compatibility wrapper exposes methods bound by modern legacy adapters', () => {
+  const adapter = new utils.Adapter({ autoStart: false, name: 'iot', handleSignals: false });
+  for (const name of [
+    'delForeignStateAsync',
+    'fileExistsAsync',
+    'chownFileAsync',
+    'chmodFileAsync',
+    'unlinkAsync',
+    'mkdirAsync',
+    'renameAsync',
+    'readDirAsync',
+    'setPasswordAsync'
+  ]) {
+    assert.strictEqual(typeof adapter[name], 'function', `${name} must be callable`);
+  }
 });
 
 test('mqtt-like example adapter starts unchanged', async () => {
